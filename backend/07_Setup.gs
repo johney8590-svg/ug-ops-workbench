@@ -138,3 +138,25 @@ function checkSetup() {
   const people = Store.rows('people');
   console.log('帳號 ' + people.length + ' 個，其中已設定密碼 ' + people.filter(function (p) { return p.pwHash; }).length + ' 個');
 }
+
+/** 檢查三套既有系統的後台長什麼樣子：只印分頁名稱、表頭與各狀態的筆數，不印內容。 */
+function checkSources() {
+  [['修繕', 'REPAIR_SHEET_ID'], ['物料異常', 'ANOMALY_SHEET_ID'], ['文宣', 'PROMO_SHEET_ID']].forEach(function (x) {
+    const id = prop_(x[1]);
+    if (!id) { console.log(x[0] + '：尚未設定 ' + x[1]); return; }
+    try {
+      SpreadsheetApp.openById(id).getSheets().forEach(function (sh) {
+        const lr = sh.getLastRow(), lc = sh.getLastColumn();
+        if (!lr || !lc) { console.log(x[0] + '｜' + sh.getName() + '：空白'); return; }
+        const h = sh.getRange(1, 1, 1, lc).getValues()[0].map(String);
+        console.log(x[0] + '｜' + sh.getName() + '（' + lr + ' 列）表頭：' + h.join(', ').slice(0, 900));
+        const si = h.map(function (k) { return /^(status|狀態)$/i.test(k.trim()) || k.indexOf('狀態') >= 0; }).indexOf(true);
+        if (si >= 0 && lr > 1) {
+          const cnt = {};
+          sh.getRange(2, si + 1, lr - 1, 1).getValues().forEach(function (r) { const k = String(r[0]); cnt[k] = (cnt[k] || 0) + 1; });
+          console.log('    「' + h[si] + '」各值筆數：' + JSON.stringify(cnt).slice(0, 600));
+        }
+      });
+    } catch (e) { console.log(x[0] + '：讀取失敗 ' + e.message); }
+  });
+}
