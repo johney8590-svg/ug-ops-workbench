@@ -1,0 +1,112 @@
+/**
+ * 管理工具：只能由試算表擁有者在 Apps Script 編輯器或試算表選單執行，不對外開放。
+ * 這份指令碼請從資料試算表的「擴充功能 → Apps Script」建立（綁定在試算表上）。
+ */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('UG 工作台')
+    .addItem('① 建立資料分頁', 'setup')
+    .addItem('② 從儀表板帶入門市', 'importStores')
+    .addItem('③ 產生初始密碼（尚未設定的帳號）', 'issuePasswords')
+    .addSeparator()
+    .addItem('重設某人的密碼', 'resetPasswordPrompt')
+    .addItem('清除營收快取', 'clearMetricsCache')
+    .addToUi();
+}
+
+/** 建立所有分頁與表頭，整張設成純文字格式。可重複執行，不會清掉既有資料。 */
+function setup() {
+  const ss = Store.ss();
+  Object.keys(TABS).forEach(function (tab) {
+    let sh = ss.getSheetByName(tab);
+    if (!sh) sh = ss.insertSheet(tab);
+    const cols = TABS[tab];
+    sh.getRange(1, 1, sh.getMaxRows(), Math.max(cols.length, sh.getMaxColumns())).setNumberFormat('@');
+    const have = sh.getRange(1, 1, 1, cols.length).getValues()[0].map(String);
+    if (have.join('') === '') sh.getRange(1, 1, 1, cols.length).setValues([cols]);
+    else cols.forEach(function (c, i) { if (have[i] !== c) throw new Error('分頁「' + tab + '」第 ' + (i + 1) + ' 欄應為 ' + c + '，目前是 ' + have[i] + '。請手動確認後再執行。'); });
+    sh.setFrozenRows(1);
+  });
+  Store.reset();
+  if (!Store.rows('people').length) {
+    [['robert', 'Robert', 'director', '營運部'],
+     ['jill', 'Jill', 'supervisor', '營運部'], ['joyce', 'Joyce', 'supervisor', '營運部'], ['lydia', 'Lydia', 'supervisor', '營運部'],
+     ['diana', 'Diana', 'supervisor', '營運部'], ['ivory', 'Ivory', 'supervisor', '營運部'], ['benson', 'Benson', 'supervisor', '營運部'],
+     ['gongwu', '工務窗口', 'dept', '工務'], ['caigou', '採購窗口', 'dept', '採購'], ['marketing', '行銷窗口', 'dept', '行銷'], ['houqin', '營運後勤窗口', 'dept', '營運後勤']
+    ].forEach(function (r) { Store.append('people', { account: r[0], name: r[1], role: r[2], dept: r[3], email: '', active: 'Y' }); });
+  }
+  return '完成。請確認 people 分頁的名單，再執行「產生初始密碼」。';
+}
+
+/** 從營運儀表板的資料分頁帶入門市與區域；已存在的門市不會被覆蓋。督導欄請手動填上督導的帳號。 */
+function importStores() {
+  const id = prop_('DASHBOARD_SHEET_ID');
+  if (!id) throw new Error('請先設定指令碼屬性 DASHBOARD_SHEET_ID');
+  const sh = SpreadsheetApp.openById(id).getSheetByName(prop_('DASHBOARD_TAB') || 'data');
+  if (!sh) throw new Error('儀表板找不到資料分頁');
+  const vals = sh.getDataRange().getValues();
+  const h = vals[0].map(function (x) { return String(x).trim().toLowerCase(); });
+  const iS = h.indexOf('store'), iZ = h.indexOf('zone');
+  if (iS < 0) throw new Error('儀表板資料分頁沒有 store 欄');
+  const have = {}; Store.rows('stores').forEach(function (s) { have[s.store] = 1; });
+  let n = 0;
+  for (let i = 1; i < vals.length; i++) {
+    const name = String(vals[i][iS]).trim();
+    if (!name || have[name]) continue;
+    have[name] = 1; n++;
+    Store.append('stores', { store: name, zone: iZ >= 0 ? String(vals[i][iZ]).trim() : '', supervisor: '', type: '', active: 'Y' });
+  }
+  return '新增 ' + n + ' 間門市。請在 stores 分頁的 supervisor 欄填上負責督導的帳號。';
+}
+
+function randomPassword_() {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 去掉容易看錯的字
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid());
+  let s = '';
+  for (let i = 0; i < 10; i++) s += chars.charAt((bytes[i] & 0xff) % chars.length);
+  return s;
+}
+function setPassword_(p, pw) {
+  const salt = Utilities.getUuid();
+  Store.update('people', p._row, { salt: salt, pwHash: hashPw_(salt, pw), mustChange: 'Y' });
+  // 讓這個人原本的登入狀態全部失效
+  Store.rows('sessions').filter(function (s) { return s.account === p.account; }).sort(function (a, b) { return b._row - a._row; })
+    .forEach(function (s) { Store.remove('sessions', s._row); });
+}
+function handout_(rows) {
+  const ss = Store.ss();
+  let sh = ss.getSheetByName('初始密碼');
+  if (!sh) { sh = ss.insertSheet('初始密碼'); sh.getRange(1, 1, sh.getMaxRows(), 4).setNumberFormat('@'); sh.getRange(1, 1, 1, 4).setValues([['account', 'name', '初始密碼', '產生時間']]); }
+  rows.forEach(function (r) { sh.appendRow([r.account, r.name, r.pw, nowStamp_()]); });
+}
+
+/** 幫 people 分頁裡還沒有密碼的帳號產生隨機初始密碼，寫到「初始密碼」分頁。發給同仁後請把該分頁刪除。 */
+function issuePasswords() {
+  const out = [];
+  withLock_(function () {
+    Store.rows('people').filter(function (p) { return p.account && !p.pwHash; }).forEach(function (p) {
+      if (ROLES.indexOf(p.role) < 0) throw new Error(p.account + ' 的 role 必須是 director、supervisor 或 dept');
+      if (p.account !== String(p.account).toLowerCase()) throw new Error('帳號請用小寫：' + p.account);
+      const pw = randomPassword_();
+      setPassword_(p, pw);
+      out.push({ account: p.account, name: p.name, pw: pw });
+    });
+    if (out.length) handout_(out);
+  });
+  audit_('admin', 'password.issue', out.map(function (r) { return r.account; }).join(','));
+  return '已產生 ' + out.length + ' 組初始密碼，請看「初始密碼」分頁。個別發給同仁後請刪除該分頁；同仁第一次登入會被要求改密碼。';
+}
+
+function resetPassword(account) {
+  const p = person_(String(account || '').trim().toLowerCase());
+  if (!p) throw new Error('找不到帳號');
+  const pw = randomPassword_();
+  withLock_(function () { setPassword_(p, pw); handout_([{ account: p.account, name: p.name, pw: pw }]); });
+  audit_('admin', 'password.reset', p.account);
+  return '已重設，新密碼在「初始密碼」分頁。';
+}
+function resetPasswordPrompt() {
+  const ui = SpreadsheetApp.getUi();
+  const r = ui.prompt('重設密碼', '請輸入帳號', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() === ui.Button.OK) ui.alert(resetPassword(r.getResponseText()));
+}
+function clearMetricsCache() { CacheService.getScriptCache().remove('metrics:' + today_()); return '已清除'; }
