@@ -131,6 +131,27 @@ ok(r.data.need.some(x => x.store === '台北公館店') && r.data.need.some(x =>
 ok(r.data.gap.some(x => x.store === '板橋府中店' && x.days === 20), '晨報未關心門市');
 ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.data.kpi);
 
+// --- 門市主檔連動（門店資料表_UG）---
+{
+  const e3 = seed(load({ props: { MASTER_SHEET_ID: 'MASTER' } }));
+  const m = e3.books.MASTER.insertSheet('門店');
+  m.appendRow(['門店資料表', '', '', '']);
+  m.appendRow(['區域', '門 市', '直營/加盟', '督導']);
+  m.appendRow(['北一', '台北信義', '直營', '劉靜蓮 Jill']);       // 沒有「店」字，要對得上儀表板的「台北信義店」
+  m.appendRow(['北一', '台北信義', '加盟', '']);
+  m.appendRow(['北一', '台北南京店', '加盟', '呂韋興 Robert']);
+  m.appendRow(['北二', '板橋府中店', '加盟', '林凱琳 Liisa']);     // people 沒有這位
+  const c3 = (action, data, token) => JSON.parse(e3.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tj = c3('login', { account: 'jill', password: 'ugdemo1234' }).data.token, tr = c3('login', { account: 'robert', password: 'ugdemo1234' }).data.token;
+  r = c3('home', {}, tj);
+  ok(r.ok && r.data.cards.length === 1 && r.data.cards[0].store === '台北信義' && r.data.cards[0].m && r.data.cards[0].m.y > 0, '主檔連動：督導門市來自主檔，名稱少一個店字也對得到營收', r);
+  r = c3('store', { store: '台北南京店' }, tj); ok(!r.ok && r.code === 'forbidden', '主檔連動：不是自己的門市仍被拒', r);
+  r = c3('brief', {}, tr);
+  ok(r.ok && r.data.kpi.stores === 3 && r.data.unassigned.length === 1 && r.data.unassigned[0].supName === '林凱琳 Liisa', '主檔連動：對不到帳號的督導會列出來', r.data && r.data.unassigned);
+  ok(r.data.supervisors.some(p => p.account === 'robert'), '主檔連動：總監自己有門市時可切換檢視');
+  r = c3('home', { as: 'robert' }, tr); ok(r.ok && r.data.cards.length === 1 && r.data.cards[0].store === '台北南京店', '主檔連動：總監看自己負責的門市', r);
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

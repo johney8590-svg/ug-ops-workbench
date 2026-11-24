@@ -10,7 +10,7 @@ function makeSheet(name) {
   const width = () => rows.reduce((m, r) => Math.max(m, r.length), 0);
   const cell = (r, c) => (rows[r] && rows[r][c] !== undefined ? rows[r][c] : '');
   return {
-    _rows: rows, getName: () => name,
+    _rows: rows, getName: () => name, getSheetId: () => 0,
     getLastColumn: width, getLastRow: () => rows.length, getMaxRows: () => 1000, getMaxColumns: () => 26,
     getDataRange() { const w = Math.max(1, width()); return { getValues: () => (rows.length ? rows : [[]]).map(r => Array.from({ length: w }, (_, c) => (r[c] === undefined ? '' : r[c]))) }; },
     getRange(r, c, nr, nc) {
@@ -26,12 +26,12 @@ function makeSheet(name) {
 }
 function makeBook() {
   const sheets = {};
-  return { _sheets: sheets, getSheetByName: n => sheets[n] || null, insertSheet(n) { sheets[n] = makeSheet(n); return sheets[n]; } };
+  return { _sheets: sheets, getSheets: () => Object.values(sheets), getSheetByName: n => sheets[n] || null, insertSheet(n) { sheets[n] = makeSheet(n); return sheets[n]; } };
 }
 
 function load(opts) {
   opts = opts || {};
-  const books = { DATA: makeBook(), DASH: makeBook() };
+  const books = { DATA: makeBook(), DASH: makeBook(), MASTER: makeBook() };
   const props = Object.assign({ DATA_SHEET_ID: 'DATA', DASHBOARD_SHEET_ID: 'DASH' }, opts.props || {});
   const cache = {}, files = {}, mails = [];
   const pad = n => ('0' + n).slice(-2);

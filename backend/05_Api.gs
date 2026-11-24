@@ -38,7 +38,7 @@ function eventView_(e) { return { id: e.id, who: e.who, name: nameOf_(e.who), st
 
 /* ---------- 我的門市 ---------- */
 function storeCard_(s, c, todayPlaces) {
-  const m = c.M.stores[s.store];
+  const m = mOf_(c.M, s.store);
   const open = c.todos.filter(function (t) { return t.store === s.store && isOpenTodo_(t); });
   const late = open.filter(function (t) { return todoLate_(t, c.today); }).length;
   const lc = lastContact_(s.store, c.visits);
@@ -61,7 +61,7 @@ function home_(me, d) {
   if (!who) fail_('請指定要檢視的督導');
   if (!isSupervisor_(me) && !isDirector_(me)) fail_('沒有權限', 'forbidden');
   const p = person_(who);
-  if (!p || p.role !== 'supervisor') fail_('找不到這位督導');
+  if (!p || !yes_(p.active) || (p.role !== 'supervisor' && p.role !== 'director')) fail_('找不到這位督導');
   const c = ctx_();
   const todayEv = eventsOn_(c.events, who, c.today);
   const places = todayEv.filter(function (e) { return e.type === '巡店' || e.type === '外出'; }).map(function (e) { return e.place; });
@@ -99,7 +99,7 @@ function store_(me, d) {
     .sort(function (a, b) { return (b.late - a.late) || (b.days - a.days); });
   const visits = c.visits.filter(function (v) { return v.store === name; }).sort(function (a, b) { return (b.date + b.time).localeCompare(a.date + a.time); }).slice(0, 8).map(visitView_);
   const lc = lastContact_(name, c.visits);
-  return { store: name, zone: s.zone, supervisor: nameOf_(s.supervisor), today: c.today, asOf: c.M.asOf, m: metricView_(c.M.stores[name]), qsc: qscOf_(name),
+  return { store: name, zone: s.zone, supervisor: s.supervisor ? nameOf_(s.supervisor) : (s.supName || '未指定'), today: c.today, asOf: c.M.asOf, m: metricView_(mOf_(c.M, name)), qsc: qscOf_(name),
     todos: todos, visits: visits, cam: camSlots_(name, c.wk, c.visits), last: lc ? { date: lc.date, mode: lc.mode } : null,
     slots: SLOTS, slotRule: SLOT_RULE };
 }
@@ -243,7 +243,7 @@ function jAuto_(who, wk, c) {
   const vs = weekVisits_(who, wk, c.visits);
   const end = addDays_(wk, 6);
   const open = c.todos.filter(function (t) { return names.indexOf(t.store) >= 0 && isOpenTodo_(t); });
-  const need = names.filter(function (n) { const m = c.M.stores[n]; return m && m.need; });
+  const need = names.filter(function (n) { const m = mOf_(c.M, n); return m && m.need; });
   const camDone = names.filter(function (n) { return camSlots_(n, wk, c.visits).length === 3; }).length;
   const plan = c.events.filter(function (e) { return e.who === who && e.type === '巡店' && e.start <= end && e.end >= wk; });
   const site = vs.filter(function (v) { return v.mode === '現場'; }).length, remote = vs.filter(function (v) { return v.mode === '遠端'; }).length;
@@ -435,14 +435,14 @@ function brief_(me) {
   const open = c.todos.filter(isOpenTodo_);
   const late = open.filter(function (t) { return todoLate_(t, c.today); }).map(function (t) { const v = todoView_(t, c.today); v.supervisor = nameOf_(supOf[t.store] || ''); return v; })
     .sort(function (a, b) { return b.days - a.days; });
-  const gap = stores.map(function (s) { const lc = lastContact_(s.store, c.visits); return { store: s.store, supervisor: nameOf_(s.supervisor), days: lc ? diffDays_(lc.date, c.today) : null, last: lc ? lc.date : '', mode: lc ? lc.mode : '' }; })
+  const gap = stores.map(function (s) { const lc = lastContact_(s.store, c.visits); return { store: s.store, supervisor: s.supervisor ? nameOf_(s.supervisor) : (s.supName || ''), days: lc ? diffDays_(lc.date, c.today) : null, last: lc ? lc.date : '', mode: lc ? lc.mode : '' }; })
     .filter(function (x) { return x.days === null || x.days >= 7; }).sort(function (a, b) { return (b.days === null ? 999 : b.days) - (a.days === null ? 999 : a.days); });
-  const need = stores.filter(function (s) { const m = c.M.stores[s.store]; return m && m.need; }).map(function (s) {
-    const m = c.M.stores[s.store];
-    return { store: s.store, supervisor: nameOf_(s.supervisor), m: metricView_(m), open: open.filter(function (t) { return t.store === s.store; }).length };
+  const need = stores.filter(function (s) { const m = mOf_(c.M, s.store); return m && m.need; }).map(function (s) {
+    const m = mOf_(c.M, s.store);
+    return { store: s.store, supervisor: s.supervisor ? nameOf_(s.supervisor) : (s.supName || ''), m: metricView_(m), open: open.filter(function (t) { return t.store === s.store; }).length };
   }).sort(function (a, b) { return (a.m.rel === null ? 0 : a.m.rel) - (b.m.rel === null ? 0 : b.m.rel); });
   let y = 0, yT = 0, a4 = 0, hasT = true;
-  stores.forEach(function (s) { const m = c.M.stores[s.store]; if (!m) return; y += m.y; a4 += m.avg4 || 0; if (m.yTarget) yT += m.yTarget; else hasT = false; });
+  stores.forEach(function (s) { const m = mOf_(c.M, s.store); if (!m) return; y += m.y; a4 += m.avg4 || 0; if (m.yTarget) yT += m.yTarget; else hasT = false; });
   const people = Store.rows('people').filter(function (p) { return yes_(p.active) && p.account !== me.account; }).map(function (p) {
     const e = eventsOn_(c.events, p.account, c.today)[0];
     return { account: p.account, name: p.name, dept: p.dept, role: p.role, type: e ? e.type : '內勤', place: e ? e.place : '' };
@@ -454,5 +454,6 @@ function brief_(me) {
       open: open.length, late: late.length, out: people.filter(function (p) { return ['巡店', '外出', '訓練'].indexOf(p.type) >= 0; }).length, leave: people.filter(function (p) { return p.type === '請假'; }).length,
       jSent: js.filter(function (j) { return j && j.state === '已送出'; }).length, jUnread: js.filter(function (j) { return j && j.state === '已送出' && !j.readAt; }).length, jTotal: sups.length },
     late: late.slice(0, 40), gap: gap.slice(0, 40), need: need.slice(0, 40), people: people,
-    supervisors: sups.map(function (p) { return { account: p.account, name: p.name }; }) };
+    supervisors: sups.concat(stores.some(function (s) { return s.supervisor === me.account; }) ? [me] : []).map(function (p) { return { account: p.account, name: p.name }; }),
+    unassigned: stores.filter(function (s) { return !s.supervisor; }).map(function (s) { return { store: s.store, supName: s.supName || '' }; }) };
 }

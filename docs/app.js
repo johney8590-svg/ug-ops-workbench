@@ -423,6 +423,7 @@
         '<div class="kpi"><div class="k">逾期待辦</div><div class="v num">' + k.late + '<span class="s"> / ' + k.open + ' 未結</span></div></div>' +
         '<div class="kpi"><div class="k">今日外出</div><div class="v num">' + k.out + '</div><div class="s">請假 ' + k.leave + '</div></div>' +
         '<div class="kpi"><div class="k">本週週誌</div><div class="v num">' + k.jSent + '<span class="s"> / ' + k.jTotal + '</span></div><div class="s">待閱 ' + k.jUnread + '</div></div></div>';
+      if (d.unassigned && d.unassigned.length) h += '<div class="note bad">有 ' + d.unassigned.length + ' 間門市對不到工作台的督導帳號：' + d.unassigned.slice(0, 12).map(function (u) { return esc(u.store) + (u.supName ? '（' + esc(u.supName) + '）' : '（主檔未填）'); }).join('、') + (d.unassigned.length > 12 ? '…' : '') + '。請在 people 分頁補上這位督導，或更新門店資料表。</div>';
       h += '<div class="sec"><h2>需關注門市</h2></div>' + (d.need.length ? d.need.map(function (x) {
         return '<button class="card" data-act="store" data-store="' + esc(x.store) + '" data-today="0"><div class="row"><span class="title">' + esc(x.store) + '</span><span class="small muted">' + esc(x.supervisor) + '</span></div><div class="row small"><span>相對區域 ' + pct(x.m.rel, ' 點') + '</span>' + (x.m.down2 ? '<span class="chip bad">連兩週下滑</span>' : '') + (x.open ? '<span class="chip warn">待辦 ' + x.open + '</span>' : '') + '</div></button>';
       }).join('') : '<div class="empty">沒有需要關注的門市</div>');

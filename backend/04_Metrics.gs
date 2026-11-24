@@ -58,8 +58,7 @@ function computeMetrics_(today) {
     if (!x.store || !isDate_(x.date)) return;
     (special[x.store] = special[x.store] || {})[x.date] = (special[x.store][x.date] || 0) + (Number(x.amount) || 0);
   });
-  const zoneTab = {};
-  Store.rows('stores').forEach(function (s) { zoneTab[s.store] = s.zone; });
+
 
   const L = latest, Ldow = dow_(L);
   const wk1 = Ldow === 0 ? monday_(L) : addDays_(monday_(L), -7);       // 最近一個完整週的週一
@@ -94,7 +93,7 @@ function computeMetrics_(today) {
       }
     }
     out[s] = {
-      zone: zoneTab[s] || dashZone[s] || '',
+      zone: dashZone[s] || '',
       y: Math.round(yv), avg4: avg4 === null ? null : Math.round(avg4),
       ch: ch === null ? null : Math.round(ch * 10) / 10,
       down2: down2,
@@ -111,5 +110,10 @@ function computeMetrics_(today) {
     m.rel = m.ch === null || !zcnt[m.zone] ? null : Math.round((m.ch - zsum[m.zone] / zcnt[m.zone]) * 10) / 10;
     m.need = (m.rel !== null && m.rel <= -10) || m.down2;
   });
-  return { asOf: L, note: '', stores: out };
+  const alias = {};
+  Object.keys(out).forEach(function (s) { alias[normStore_(s)] = s; });
+  return { asOf: L, note: '', stores: out, alias: alias };
 }
+
+/** 取某門市的指標；門市名稱與儀表板差一個「店」字或空白也對得上。 */
+function mOf_(M, name) { return M.stores[name] || M.stores[(M.alias || {})[normStore_(name)]] || null; }
