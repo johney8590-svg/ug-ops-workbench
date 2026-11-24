@@ -110,3 +110,19 @@ function resetPasswordPrompt() {
   if (r.getSelectedButton() === ui.Button.OK) ui.alert(resetPassword(r.getResponseText()));
 }
 function clearMetricsCache() { CacheService.getScriptCache().remove('metrics:' + today_()); return '已清除'; }
+
+/** 自我檢查：在編輯器執行後看「執行記錄」。只印數量與對不上的名稱，不印任何密碼。 */
+function checkSetup() {
+  const M = computeMetrics_(today_());
+  console.log('營收資料：' + (M.asOf ? '更新到 ' + M.asOf + '，共 ' + Object.keys(M.stores).length + ' 間門市' : '讀不到（' + M.note + '）'));
+  storesMemo_ = null; CacheService.getScriptCache().remove('masterStores');
+  let stores;
+  try { stores = prop_('MASTER_SHEET_ID') ? masterStores_() : activeStores_(); console.log('門市來源：' + (prop_('MASTER_SHEET_ID') ? '門店資料表（連動）' : 'stores 分頁') + '，共 ' + stores.length + ' 間'); }
+  catch (e) { console.log('門店資料表讀取失敗：' + e.message); return; }
+  const bySup = {}, noMetric = [];
+  stores.forEach(function (s) { const k = s.supervisor || ('未對應：' + (s.supName || '主檔未填')); bySup[k] = (bySup[k] || 0) + 1; if (M.asOf && !mOf_(M, s.store)) noMetric.push(s.store); });
+  Object.keys(bySup).sort().forEach(function (k) { console.log('  ' + k + '：' + bySup[k] + ' 間'); });
+  console.log('主檔有、儀表板沒有營收的門市（' + noMetric.length + '）：' + noMetric.join('、'));
+  const people = Store.rows('people');
+  console.log('帳號 ' + people.length + ' 個，其中已設定密碼 ' + people.filter(function (p) { return p.pwHash; }).length + ' 個');
+}
