@@ -147,7 +147,7 @@
     cards.forEach(function (c) {
       h += '<button class="card" data-act="store" data-store="' + esc(c.store) + '" data-today="' + (c.today ? 1 : 0) + '"><div class="row"><span class="title">' + esc(c.store) + '</span>' + (c.today ? '<span class="chip today">今日行程</span>' : '') + '</div>' +
         '<div class="row">' + metricLine(c.m) + '</div><div class="row">' + camDots(c.cam) + '</div>' +
-        (c.reasons.length ? '<div class="chips">' + c.reasons.map(function (r) { return '<span class="chip ' + (r[0] === 'bad' ? 'bad' : 'warn') + '">' + esc(r[1]) + '</span>'; }).join('') + '</div>' : '<div class="chips"><span class="chip good">目前沒有待處理</span></div>') + '</button>';
+        (c.reasons.length ? '<div class="chips">' + c.reasons.map(function (r) { return '<span class="chip ' + (r[0] === 'bad' ? 'bad' : r[0] === 'info' ? '' : 'warn') + '">' + esc(r[1]) + '</span>'; }).join('') + '</div>' : '<div class="chips"><span class="chip good">目前沒有待處理</span></div>') + '</button>';
     });
     view().innerHTML = h;
   }
@@ -178,12 +178,15 @@
   function todoHtml(t, ctx) {
     var h = '<div class="item"><div class="row"><b>' + (ctx === 'list' ? esc(t.store) + '・' : '') + esc(t.text) + '</b></div>' +
       '<div class="chips"><span class="chip">' + esc(t.source) + ' → ' + esc(t.dept) + '</span><span class="chip">' + esc(t.status) + '</span><span class="chip ' + (t.late ? 'bad' : '') + '">' + (t.late ? '逾期・' : '') + '已 ' + t.days + ' 天</span>' + (t.hasPhoto ? '<span class="chip">有照片</span>' : '') + '</div>';
-    if (t.notes.length) h += '<div class="small muted pre">' + t.notes.slice(-3).map(function (n) { return esc(n.at.slice(5, 16)) + ' ' + esc(n.by) + '：' + esc(n.text); }).join('\n') + '</div>';
+    if (t.notes.length) h += '<div class="small muted pre">' + t.notes.slice(-4).map(function (n) { return esc(n.at.slice(5, 16)) + ' ' + esc(n.by) + '：' + (n.help ? (n.done ? '【已協助】' : '【請總監協助】') : '') + esc(n.text) + (n.reply ? '\n　↳ 總監回覆：' + esc(n.reply) : ''); }).join('\n') + '</div>';
     h += '<div class="btns">';
     var id = ' data-id="' + esc(t.id) + '"';
     if (t.ext) {                                      // 既有系統的單：這裡只看，處理要回原系統
       h += '<span class="chip">' + esc(t.sys) + '・' + esc(t.id) + '</span>';
       if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">到' + esc(t.sys) + '處理</a>';
+      h += '<button class="btn sm" data-act="x-note"' + id + '>' + (S.me.role === 'director' ? '加註' : '補充說明給總監') + '</button>';
+      var open = t.notes.filter(function (n) { return n.help && !n.done; }).slice(-1)[0];
+      if (open && S.me.role === 'director') h += '<button class="btn sm primary" data-act="x-resolve" data-note="' + esc(open.noteId) + '">回覆並標為已協助</button>';
       return h + '</div></div>';
     }
     if (S.me.role === 'dept') {
@@ -241,6 +244,7 @@
       (d.qsc.fails.length ? '<div class="small muted">上次未達標，這次順便確認：</div><div class="chips">' + d.qsc.fails.map(function (f) { return '<span class="chip warn">' + esc(f) + '</span>'; }).join('') + '</div>' : '') + '</div>';
     h += '<div class="sec"><h2>待辦（' + d.todos.length + '）</h2><button class="btn sm right" data-act="report">＋ 拍照回報</button></div><div class="card">' +
       (d.todos.length ? d.todos.map(function (t) { return todoHtml(t, 'store'); }).join('') : '<div class="empty">沒有未結案的待辦</div>') + '</div>';
+    if (d.anomaly && d.anomaly.length) h += '<div class="sec"><h2>本月物料異常通報（' + d.anomaly.length + '）</h2></div><div class="note">當月新增的只是通報，相關部門處理中，不算待辦；跨月還沒處理完才會列入逾期。</div><div class="card">' + d.anomaly.map(function (t) { return todoHtml(t, 'store'); }).join('') + '</div>';
     h += '<div class="sec"><h2>訪店紀錄</h2></div><div id="vform">' + visitForm() + '</div>';
     if (d.visits.length) h += '<div class="sec"><h2>最近紀錄</h2></div><div class="card">' + d.visits.map(visitHtml).join('') + '</div>';
     sp.body.innerHTML = h;
@@ -336,7 +340,8 @@
       S.data.todos = d.todos;
       var late = d.todos.filter(function (t) { return t.late; }).length;
       view().innerHTML = '<div class="sec"><h2>' + (S.me.role === 'dept' ? esc(S.me.dept) + '的待辦' : '未結案待辦') + '（' + d.todos.length + '）</h2>' + (late ? '<span class="chip bad right">逾期 ' + late + '</span>' : '') + '</div>' +
-        (d.todos.length ? '<div class="card">' + d.todos.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>' : '<div class="empty">目前沒有未結案的待辦</div>');
+        (d.todos.length ? '<div class="card">' + d.todos.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>' : '<div class="empty">目前沒有未結案的待辦</div>') +
+        (d.anomTotal ? '<div class="sec"><h2>本月物料異常通報（' + d.anomTotal + '）</h2></div><div class="note">當月新增的只是通報，不算待辦；跨月未處理才列入上面的逾期。</div><div class="card">' + d.anom.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>' : '');
     }).catch(failView);
   }
   function afterTodo() { if (SP) return reloadStore(); if (S.tab === 'todos') loadTodos(); if (S.tab === 'brief') loadBrief(); }
@@ -442,14 +447,17 @@
         '<div class="kpis"><div class="kpi"><div class="k">昨日營收</div><div class="v num">' + money(k.y) + '</div><div class="s">' + pct(k.ch) + (k.ach !== null ? '・目標 ' + k.ach + '%' : '') + '</div></div>' +
         '<div class="kpi"><div class="k">需關注門市</div><div class="v num">' + d.need.length + '<span class="s"> / ' + k.stores + '</span></div></div>' +
         '<div class="kpi"><div class="k">逾期待辦</div><div class="v num">' + k.late + '<span class="s"> / ' + k.open + ' 未結</span></div></div>' +
+        '<div class="kpi"><div class="k">待你協助</div><div class="v num">' + d.help.length + '</div><div class="s">本月物料異常 ' + d.anom.total + '</div></div>' +
         '<div class="kpi"><div class="k">今日外出</div><div class="v num">' + k.out + '</div><div class="s">請假 ' + k.leave + '</div></div>' +
         '<div class="kpi"><div class="k">本週週誌</div><div class="v num">' + k.jSent + '<span class="s"> / ' + k.jTotal + '</span></div><div class="s">待閱 ' + k.jUnread + '</div></div></div>';
       if (d.unassigned && d.unassigned.length) h += '<div class="note bad">有 ' + d.unassigned.length + ' 間門市對不到工作台的督導帳號：' + d.unassigned.slice(0, 12).map(function (u) { return esc(u.store) + (u.supName ? '（' + esc(u.supName) + '）' : '（主檔未填）'); }).join('、') + (d.unassigned.length > 12 ? '…' : '') + '。請在 people 分頁補上這位督導，或更新門店資料表。</div>';
+      if (d.help.length) h += '<div class="sec"><h2>請你協助跨部門溝通（' + d.help.length + '）</h2></div><div class="card">' + d.help.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>';
       h += '<div class="sec"><h2>需關注門市</h2></div>' + (d.need.length ? d.need.map(function (x) {
         return '<button class="card" data-act="store" data-store="' + esc(x.store) + '" data-today="0"><div class="row"><span class="title">' + esc(x.store) + '</span><span class="small muted">' + esc(x.supervisor) + '</span></div><div class="row small"><span>相對區域 ' + pct(x.m.rel, ' 點') + '</span>' + (x.m.down2 ? '<span class="chip bad">連兩週下滑</span>' : '') + (x.open ? '<span class="chip warn">待辦 ' + x.open + '</span>' : '') + '</div></button>';
       }).join('') : '<div class="empty">沒有需要關注的門市</div>');
       h += '<div class="sec"><h2>逾期待辦</h2></div>' + (d.late.length ? '<div class="card">' + d.late.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>' : '<div class="empty">沒有逾期的待辦</div>');
       h += '<div class="sec"><h2>超過 7 天沒關心的門市</h2></div>' + (d.gap.length ? '<div class="card">' + d.gap.map(function (g) { return '<div class="item row"><b>' + esc(g.store) + '</b><span class="small muted">' + esc(g.supervisor) + '</span><span class="chip ' + (g.days === null || g.days >= 14 ? 'bad' : 'warn') + ' right">' + (g.days === null ? '尚無紀錄' : g.days + ' 天') + '</span></div>'; }).join('') + '</div>' : '<div class="empty">每間店這週都有人關心</div>');
+      if (d.anom.total) h += '<div class="sec"><h2>本月物料異常通報（' + d.anom.total + ' 筆，' + d.anom.stores.length + ' 間）</h2></div><div class="card">' + d.anom.stores.map(function (x) { return '<div class="item row"><b>' + esc(x.store) + '</b><span class="small muted">' + esc(x.supervisor) + '</span><span class="chip right">' + x.n + ' 筆</span></div>'; }).join('') + '</div>';
       h += '<div class="sec"><h2>今日動態</h2></div><div class="card">' + d.people.map(function (p) { return '<div class="item row"><b>' + esc(p.name) + '</b><span class="small muted">' + esc(p.dept) + '</span><span class="right small">' + esc(p.type) + (p.place ? '・' + esc(p.place) : '') + '</span></div>'; }).join('') + '</div>';
       view().innerHTML = h;
     }).catch(failView);
@@ -518,6 +526,20 @@
         body.innerHTML = ''; body.appendChild(img);
       }).catch(function (e) { body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     },
+    'x-note': function (b) {
+      openSheet('補充說明', '<p class="muted small">寫下這個案件的實際狀況。內容只存在工作台，總監看得到，不會寫回原系統。</p><label class="f">實際狀況<textarea id="xn-text" maxlength="800" placeholder="例：廠商已來看過兩次仍未修好，門市用備用機撐著"></textarea></label>' +
+        (S.me.role === 'director' ? '' : '<div class="pick"><label><input type="checkbox" id="xn-help">需要總監協助跨部門溝通</label></div>') +
+        '<div class="btns"><button class="btn primary block" data-act="x-note-send" data-id="' + esc(b.dataset.id) + '">送出</button></div>');
+    },
+    'x-note-send': function (b) {
+      var body = topBody(), text = body.querySelector('#xn-text').value.trim(), help = body.querySelector('#xn-help');
+      if (!text) return toast('請寫下實際狀況');
+      busy(b, api('ext.note', { id: b.dataset.id, text: text, help: !!(help && help.checked) })).then(function () { closeSheet(); toast(help && help.checked ? '已送出，會出現在總監的晨報' : '已送出'); afterTodo(); }).catch(oops);
+    },
+    'x-resolve': function (b) {
+      openSheet('回覆協助請求', '<label class="f">回覆（選填）<textarea id="xr-text" maxlength="800" placeholder="例：已跟採購主管確認，週四前到貨"></textarea></label><div class="btns"><button class="btn primary block" data-act="x-resolve-send" data-note="' + esc(b.dataset.note) + '">標為已協助</button></div>');
+    },
+    'x-resolve-send': function (b) { busy(b, api('ext.resolve', { noteId: b.dataset.note, reply: topBody().querySelector('#xr-text').value.trim() })).then(function () { closeSheet(); toast('已回覆'); afterTodo(); }).catch(oops); },
     wk: function (b) { var n = +b.dataset.n; S.sched.from = n ? addDays(S.sched.from, n) : monday(S.today); loadSched(); },
     'ev-new': function () { eventForm(null); },
     'ev-edit': function (b) { var e = (S.data.events || []).filter(function (x) { return x.id === b.dataset.id; })[0]; if (e) eventForm(e); },

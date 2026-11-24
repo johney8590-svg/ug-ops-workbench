@@ -6,16 +6,35 @@
 /* ---------- 共用 ---------- */
 function ctx_() {
   const today = today_();
-  return { today: today, wk: monday_(today), M: metrics_(), visits: Store.rows('visits'), todos: allTodos_(), events: Store.rows('events') };
+  const all = allTodos_();
+  return { today: today, wk: monday_(today), M: metrics_(), visits: Store.rows('visits'), events: Store.rows('events'),
+    todos: all.filter(function (t) { return !isAnomNew_(t, today); }),     // 要追的待辦
+    anom: all.filter(function (t) { return isAnomNew_(t, today); }) };     // 本月新增的物料異常：只是通報，不算待辦
+}
+/**
+ * 物料異常的規則（2026-11 定案）：相關部門作業需要時間，所以當月新增的只當「通報」看，不算待辦、不算逾期；
+ * 跨到下個月還沒處理完的，才列為逾期待辦。
+ */
+function isAnom_(t) { return yes_(t.ext) && t.source === '物料異常'; }
+function isAnomNew_(t, today) { return isAnom_(t) && String(t.createdAt).slice(0, 7) >= today.slice(0, 7); }
+/** 督導或處理單位寫給總監的補充說明（存在工作台，不寫回原系統）。 */
+function caseNotes_(caseId) {
+  return Store.rows('extnotes').filter(function (n) { return n.caseId === caseId; }).map(function (n) {
+    return { noteId: n.id, at: n.at, by: nameOf_(n.by), text: n.text, help: yes_(n.help), done: !!n.doneAt, reply: n.reply || '' };
+  });
 }
 function nameOf_(account) { const p = person_(account); return p ? p.name : account; }
 function isOpenTodo_(t) { return t.status !== '已完成'; }
 function todoDays_(t, today) { return Math.max(0, diffDays_(String(t.createdAt).slice(0, 10), today)); }
-function todoLate_(t, today) { return isOpenTodo_(t) && todoDays_(t, today) > ((SOURCES[t.source] || SOURCES['其他']).limit); }
+function todoLate_(t, today) {
+  if (isAnom_(t)) return String(t.createdAt).slice(0, 7) < today.slice(0, 7);        // 物料異常：跨月未處理才算逾期
+  return isOpenTodo_(t) && todoDays_(t, today) > ((SOURCES[t.source] || SOURCES['其他']).limit);
+}
 function todoView_(t, today) {
+  const xn = yes_(t.ext) ? caseNotes_(t.id) : null;
   return { id: t.id, store: t.store, source: t.source, dept: t.dept, text: t.text, status: t.status, by: yes_(t.ext) ? '門市' : nameOf_(t.by),
     createdAt: String(t.createdAt).slice(0, 10), days: todoDays_(t, today), late: todoLate_(t, today),
-    notes: J_(t.notes, []), nudgedToday: t.nudgedAt === today, hasPhoto: !!t.photoId,
+    notes: xn || J_(t.notes, []), help: !!xn && xn.some(function (n) { return n.help && !n.done; }), nudgedToday: t.nudgedAt === today, hasPhoto: !!t.photoId,
     ext: yes_(t.ext), sys: yes_(t.ext) ? EXT_SYSTEMS[t.source].sys : '', url: yes_(t.ext) ? EXT_SYSTEMS[t.source].url : '' };
 }
 function camSlots_(store, wk, visits) {
@@ -53,7 +72,9 @@ function storeCard_(s, c, todayPlaces) {
   if (days === null) { reasons.push(['warn', '尚無關心紀錄']); score += 2; }
   else if (days >= 7) { reasons.push(['warn', days + ' 天未關心']); score += days >= 14 ? 3 : 2; }
   const bare = s.store.replace(/店$/, '');
-  return { store: s.store, zone: s.zone, m: metricView_(m), open: open.length, late: late, days: days, cam: cam, reasons: reasons, score: score,
+  const anomNew = c.anom.filter(function (t) { return t.store === s.store; }).length;
+  if (anomNew) reasons.push(['info', '本月物料異常 ' + anomNew]);
+  return { store: s.store, zone: s.zone, m: metricView_(m), anomNew: anomNew, open: open.length, late: late, days: days, cam: cam, reasons: reasons, score: score,
     today: todayPlaces.some(function (p) { return p.indexOf(s.store) >= 0 || p.indexOf(bare) >= 0; }) };
 }
 
@@ -101,7 +122,7 @@ function store_(me, d) {
   const visits = c.visits.filter(function (v) { return v.store === name; }).sort(function (a, b) { return (b.date + b.time).localeCompare(a.date + a.time); }).slice(0, 8).map(visitView_);
   const lc = lastContact_(name, c.visits);
   return { store: name, zone: s.zone, supervisor: s.supervisor ? nameOf_(s.supervisor) : (s.supName || '未指定'), today: c.today, asOf: c.M.asOf, m: metricView_(mOf_(c.M, name)), qsc: qscOf_(name),
-    todos: todos, visits: visits, cam: camSlots_(name, c.wk, c.visits), last: lc ? { date: lc.date, mode: lc.mode } : null,
+    todos: todos, anomaly: c.anom.filter(function (t) { return t.store === name; }).map(function (t) { return todoView_(t, c.today); }), visits: visits, cam: camSlots_(name, c.wk, c.visits), last: lc ? { date: lc.date, mode: lc.mode } : null,
     slots: SLOTS, slotRule: SLOT_RULE };
 }
 
@@ -222,7 +243,10 @@ function todoList_(me, d) {
   const today = today_();
   let list = allTodos_().filter(function (t) { return canSeeTodo_(me, t); });
   if (!d.all) list = list.filter(isOpenTodo_);
-  return { today: today, todos: list.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return (b.late - a.late) || (b.days - a.days); }).slice(0, 300) };
+  const anom = list.filter(function (t) { return isAnomNew_(t, today); });
+  list = list.filter(function (t) { return !isAnomNew_(t, today); });
+  return { today: today, todos: list.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return (b.late - a.late) || (b.days - a.days); }).slice(0, 300),
+    anom: anom.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return a.days - b.days; }).slice(0, 150), anomTotal: anom.length };
 }
 function photoGet_(me, d) {
   const t = findTodo_(str_(d.id, 40));
@@ -455,6 +479,34 @@ function brief_(me) {
       open: open.length, late: late.length, out: people.filter(function (p) { return ['巡店', '外出', '訓練'].indexOf(p.type) >= 0; }).length, leave: people.filter(function (p) { return p.type === '請假'; }).length,
       jSent: js.filter(function (j) { return j && j.state === '已送出'; }).length, jUnread: js.filter(function (j) { return j && j.state === '已送出' && !j.readAt; }).length, jTotal: sups.length },
     late: late.slice(0, 40), gap: gap.slice(0, 40), need: need.slice(0, 40), people: people,
+    help: c.todos.concat(c.anom).filter(function (t) { return yes_(t.ext); }).map(function (t) { return todoView_(t, c.today); }).filter(function (v) { return v.help; }),
+    anom: (function () { const n = {}; c.anom.forEach(function (t) { n[t.store] = (n[t.store] || 0) + 1; });
+      return { total: c.anom.length, stores: Object.keys(n).map(function (k) { return { store: k, n: n[k], supervisor: supOf[k] ? nameOf_(supOf[k]) : '' }; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 40) }; })(),
     supervisors: sups.concat(stores.some(function (s) { return s.supervisor === me.account; }) ? [me] : []).map(function (p) { return { account: p.account, name: p.name }; }),
     unassigned: stores.filter(function (s) { return !s.supervisor; }).map(function (s) { return { store: s.store, supName: s.supName || '' }; }) };
+}
+
+/* ---------- 既有系統案件的補充說明（給總監看實際狀況，或請總監協助跨部門溝通） ---------- */
+function extCase_(me, id) {
+  const t = allTodos_().filter(function (x) { return yes_(x.ext) && x.id === id; })[0];
+  if (!t) fail_('找不到這個案件，可能已經在原系統結案');
+  if (!canSeeTodo_(me, t)) fail_('你沒有這個案件的權限', 'forbidden');
+  return t;
+}
+function extNote_(me, d) {
+  const t = extCase_(me, str_(d.id, 60));
+  const text = str_(d.text, 800);
+  if (!text) fail_('請寫下實際狀況');
+  const help = !!d.help && !isDirector_(me);
+  withLock_(function () { Store.append('extnotes', { id: uid_('N'), caseId: t.id, store: t.store, at: nowStamp_(), by: me.account, text: text, help: help, doneAt: '', doneBy: '', reply: '' }); });
+  audit_(me.account, 'ext.note', t.id + (help ? ' 請總監協助' : ''));
+  return { todo: todoView_(t, today_()) };
+}
+function extResolve_(me, d) {
+  if (!isDirector_(me)) fail_('只有營運總監可以回覆協助請求', 'forbidden');
+  const n = Store.rows('extnotes').filter(function (x) { return x.id === str_(d.noteId, 40); })[0];
+  if (!n) fail_('找不到這則說明');
+  withLock_(function () { Store.update('extnotes', n._row, { doneAt: nowStamp_(), doneBy: me.account, reply: str_(d.reply, 800) }); });
+  audit_(me.account, 'ext.resolve', n.caseId);
+  return {};
 }

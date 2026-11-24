@@ -24,6 +24,8 @@ const ACTIONS = {
   'events.delete': { fn: eventsDelete_ },
   'cal.url':       { fn: calUrl_ },
   'cal.reset':     { fn: calReset_ },
+  'ext.note':      { fn: extNote_ },
+  'ext.resolve':   { fn: extResolve_ },
   'brief':         { fn: brief_ }
 };
 

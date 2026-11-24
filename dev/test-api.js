@@ -163,6 +163,7 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   const an = e4.books.ANOMALY.insertSheet('cases');
   an.appendRow(['caseNo', 'date', 'store', 'name', 'mat', 'mfg', 'exp', 'qty', 'cls', 'desc', 'mediaUrls', 'handle', 'method', 'result', 'status', 'createdAt']);
   an.appendRow(['A001', '2026/11/23', '台北信義', '小明', '鮮乳', '', '', '2', '少送', '少兩箱', '', '', '', '', 'pend', '2026-11-23T01:00:00.000Z']);
+  an.appendRow(['A000', '2026/10/20', '台北信義店', '小明', '珍珠', '', '', '1', '品質', '偏硬', '', '', '', '', 'doing', '2026-10-20T01:00:00.000Z']);
   an.appendRow(['A002', '2026/11/01', '台北南京店', '小華', '杯蓋', '', '', '1', '破損', '', '', '', '', '', 'done', '2026-11-01T01:00:00.000Z']);
   const pm = e4.books.PROMO.insertSheet('cases');
   pm.appendRow(['caseNo', 'applyDate', 'dept', 'region', 'store', 'supervisor', 'phone', 'items', 'pos', 'amount', 'status', 'quote', 'actual', 'adminNote', 'createdAt']);
@@ -173,21 +174,36 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   const tj = tk('jill'), tr = tk('robert'), tg = tk('gongwu'), tc = tk('caigou');
   r = c4('store', { store: '台北信義店' }, tj);
   const ids = r.ok ? r.data.todos.map(t => t.id).sort().join() : '';
-  ok(ids === 'A001,PR001,R20261110-0001', '外部案件：門市頁看到三套系統未結案的單，已結案的不顯示', r.data && r.data.todos);
+  ok(ids === 'A000,PR001,R20261110-0001', '外部案件：門市頁看到未結案的單；當月物料異常不算待辦', r.data && r.data.todos);
+  ok(r.data.anomaly.map(t => t.id).join() === 'A001' && !r.data.anomaly[0].late, '物料異常：當月新增的列在通報、不算逾期', r.data.anomaly);
+  ok((r.data.todos.find(t => t.id === 'A000') || {}).late === true, '物料異常：跨月未處理列為逾期');
+  ok((r.data.todos.find(t => t.id === 'PR001') || {}).late === true, '文宣：超過 7 天才算逾期（9 天）', r.data.todos.find(t => t.id === 'PR001'));
   const rep = r.data.todos.find(t => t.id === 'R20261110-0001') || {};
   ok(rep.ext && rep.sys === '修繕系統' && rep.dept === '採購' && rep.days === 14 && rep.late && /製冰機：不製冰/.test(rep.text), '外部案件：修繕單的單位、天數、逾期', rep);
   const pr1 = r.data.todos.find(t => t.id === 'PR001') || {};
   ok(pr1.text === '文宣申請：冬季海報、立牌' && pr1.status === '設計中', '外部案件：文宣品項與狀態', pr1);
-  ok((r.data.todos.find(t => t.id === 'A001') || {}).status === '待處理', '外部案件：物料異常狀態中文');
-  r = c4('home', {}, tj); ok(r.data.cards.find(x => x.store === '台北信義店').open === 3, '外部案件：計入門市卡片的待辦數', r.data.cards.find(x => x.store === '台北信義店'));
-  r = c4('todo.list', {}, tj); ok(r.data.todos.length === 3, '外部案件：督導只看到自己門市的', r.data.todos.map(t => t.id));
+  ok((r.data.anomaly.find(t => t.id === 'A001') || {}).status === '待處理', '外部案件：物料異常狀態中文');
+  r = c4('home', {}, tj); ok(r.data.cards.find(x => x.store === '台北信義店').open === 3 && r.data.cards.find(x => x.store === '台北信義店').anomNew === 1, '外部案件：計入門市卡片的待辦數', r.data.cards.find(x => x.store === '台北信義店'));
+  r = c4('todo.list', {}, tj); ok(r.data.todos.length === 3 && r.data.anomTotal === 1, '外部案件：督導只看到自己門市的', r.data.todos.map(t => t.id));
   r = c4('todo.list', {}, tg); ok(r.data.todos.map(t => t.id).join() === 'R20261122-0003', '外部案件：工務只看到指派給工務的', r.data.todos.map(t => t.id));
-  r = c4('todo.list', {}, tc); ok(r.data.todos.map(t => t.id).sort().join() === 'A001,R20261110-0001', '外部案件：採購看到指派給採購的', r.data.todos.map(t => t.id));
-  r = c4('brief', {}, tr); ok(r.data.kpi.open === 4 && r.data.late.some(t => t.id === 'R20261110-0001'), '外部案件：進晨報', r.data.kpi);
+  r = c4('todo.list', {}, tc); ok(r.data.todos.map(t => t.id).sort().join() === 'A000,R20261110-0001' && r.data.anom[0].id === 'A001', '外部案件：採購看到指派給採購的', r.data.todos.map(t => t.id));
+  r = c4('brief', {}, tr); ok(r.data.kpi.open === 4 && r.data.late.some(t => t.id === 'R20261110-0001') && r.data.anom.total === 1 && r.data.anom.stores[0].store === '台北信義店', '外部案件：進晨報；本月物料異常另列', r.data.anom);
+  // 補充說明與請總監協助
+  r = c4('ext.note', { id: 'R20261110-0001', text: '', help: true }, tj); ok(!r.ok, '補充說明：空白被拒');
+  r = c4('ext.note', { id: 'R20261122-0003', text: 'x' }, tj); ok(!r.ok && r.code === 'forbidden', '補充說明：別人門市的案件不能寫', r);
+  r = c4('ext.note', { id: 'R20261110-0001', text: '廠商來兩次沒修好', help: true }, tj); ok(r.ok && r.data.todo.help === true && r.data.todo.notes[0].help, '補充說明：督導請總監協助', r);
+  r = c4('ext.note', { id: 'A001', text: '採購已補寄' }, tc); ok(r.ok && !r.data.todo.help, '補充說明：處理單位也能補充（不帶協助請求）', r);
+  r = c4('brief', {}, tr); ok(r.data.help.length === 1 && r.data.help[0].id === 'R20261110-0001', '補充說明：晨報列出待協助案件', r.data.help);
+  const nid = r.data.help[0].notes[0].noteId;
+  r = c4('ext.resolve', { noteId: nid, reply: 'x' }, tj); ok(!r.ok && r.code === 'forbidden', '補充說明：只有總監能回覆');
+  r = c4('ext.resolve', { noteId: nid, reply: '已請採購主管處理' }, tr); ok(r.ok, '補充說明：總監回覆', r);
+  r = c4('store', { store: '台北信義店' }, tj); const rr = r.data.todos.find(t => t.id === 'R20261110-0001');
+  ok(rr.help === false && rr.notes[0].done && rr.notes[0].reply === '已請採購主管處理', '補充說明：督導看到總監回覆', rr);
+  r = c4('brief', {}, tr); ok(r.data.help.length === 0, '補充說明：處理後從晨報消失');
   r = c4('todo.nudge', { id: 'R20261110-0001' }, tj); ok(!r.ok, '外部案件：不能在工作台催辦（不寫回原系統）', r);
   r = c4('todo.status', { id: 'R20261122-0003', status: '已完成' }, tg); ok(!r.ok, '外部案件：不能在工作台結案');
   r = c4('todo.add', { store: '台北信義店', text: '製冰機又壞了' }, tj); ok(r.ok && r.data.dupes && r.data.dupes[0].ext && r.data.dupes[0].id === 'R20261110-0001', '外部案件：回報時提醒修繕系統已有單', r);
-  ok(e4.books.REPAIR._sheets.repairs._rows.length === 4 && e4.books.ANOMALY._sheets.cases._rows.length === 3 && e4.books.PROMO._sheets.cases._rows.length === 3, '外部案件：三套系統的資料沒有被改動');
+  ok(e4.books.REPAIR._sheets.repairs._rows.length === 4 && e4.books.ANOMALY._sheets.cases._rows.length === 4 && e4.books.PROMO._sheets.cases._rows.length === 3, '外部案件：三套系統的資料沒有被改動');
 }
 
 // --- 初始密碼流程 ---
