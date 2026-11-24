@@ -4,10 +4,23 @@
  * 結果暫存 45 分鐘，warmCache 每次執行會重新整理。
  */
 const EXT_SYSTEMS = {
-  '修繕':     { sys: '修繕系統',     url: 'https://johney8590-svg.github.io/ug-repair-web/' },
-  '物料異常': { sys: '物料異常系統', url: 'https://johney8590-svg.github.io/store-anomaly-report-web/' },
-  '文宣':     { sys: '文宣申請系統', url: 'https://johney8590-svg.github.io/promo-apply-web/' }
+  '修繕':     { sys: '修繕系統',     front: 'https://johney8590-svg.github.io/ug-repair-web/',              adminProp: 'REPAIR_ADMIN_URL',  admin: '' },
+  '物料異常': { sys: '物料異常系統', front: 'https://johney8590-svg.github.io/store-anomaly-report-web/',   adminProp: 'ANOMALY_ADMIN_URL', admin: 'https://johney8590-svg.github.io/store-anomaly-report-web/admin.html' },
+  '文宣':     { sys: '文宣申請系統', front: 'https://johney8590-svg.github.io/promo-apply-web/',            adminProp: 'PROMO_ADMIN_URL',   admin: 'https://johney8590-svg.github.io/promo-apply-web/admin.html' }
 };
+/**
+ * 連回原系統的網址。總監與處理單位拿到「管理用」網址；督導拿不到（督導不處理案件，管理網址也不該外流）。
+ * 修繕系統的管理網址帶有管理金鑰，所以不寫在程式裡，請放在指令碼屬性 REPAIR_ADMIN_URL。
+ */
+let VIEWER_ = null;
+function extUrl_(t) {
+  const x = EXT_SYSTEMS[t.source];
+  if (!x || !VIEWER_ || VIEWER_.role === 'supervisor') return '';
+  let u = prop_(x.adminProp) || x.admin;
+  if (!/^https:\/\//.test(String(u))) return '';
+  if (t.source === '修繕') u += (u.indexOf('?') >= 0 ? '&' : '?') + 'case=' + encodeURIComponent(t.id);
+  return u;
+}
 
 function extStamp_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd HH:mm:ss');

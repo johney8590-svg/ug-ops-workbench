@@ -104,9 +104,9 @@
     }).catch(function (e) { if (e.code !== 'auth' && e.code !== 'must_change' && !started) renderLogin(e.message); });
   }
   function tabsFor() {
-    if (S.me.role === 'director') return [['brief', '晨報'], ['home', '督導'], ['sched', '行程'], ['journal', '週誌'], ['todos', '待辦']];
-    if (S.me.role === 'supervisor') return [['home', '我的門市'], ['sched', '行程'], ['journal', '週誌'], ['todos', '待辦']];
-    return [['todos', '待辦'], ['sched', '行程']];
+    if (S.me.role === 'director') return [['brief', '晨報'], ['home', '督導'], ['sched', '行程'], ['journal', '週誌'], ['todos', '待辦'], ['posts', '公告']];
+    if (S.me.role === 'supervisor') return [['home', '我的門市'], ['sched', '行程'], ['journal', '週誌'], ['todos', '待辦'], ['posts', '公告']];
+    return [['todos', '待辦'], ['sched', '行程'], ['posts', '公告']];
   }
   function start() {
     S.sched.from = monday(S.today); S.jweek = monday(S.today);
@@ -183,7 +183,7 @@
     var id = ' data-id="' + esc(t.id) + '"';
     if (t.ext) {                                      // 既有系統的單：這裡只看，處理要回原系統
       h += '<span class="chip">' + esc(t.sys) + '・' + esc(t.id) + '</span>';
-      if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">到' + esc(t.sys) + '處理</a>';
+      if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">開啟' + esc(t.sys) + '後台</a>';
       h += '<button class="btn sm" data-act="x-note"' + id + '>' + (S.me.role === 'director' ? '加註' : '補充說明給總監') + '</button>';
       var open = t.notes.filter(function (n) { return n.help && !n.done; }).slice(-1)[0];
       if (open && S.me.role === 'director') h += '<button class="btn sm primary" data-act="x-resolve" data-note="' + esc(open.noteId) + '">回覆並標為已協助</button>';
@@ -447,6 +447,7 @@
         '<div class="kpis"><div class="kpi"><div class="k">昨日營收</div><div class="v num">' + money(k.y) + '</div><div class="s">' + pct(k.ch) + (k.ach !== null ? '・目標 ' + k.ach + '%' : '') + '</div></div>' +
         '<div class="kpi"><div class="k">需關注門市</div><div class="v num">' + d.need.length + '<span class="s"> / ' + k.stores + '</span></div></div>' +
         '<div class="kpi"><div class="k">逾期待辦</div><div class="v num">' + k.late + '<span class="s"> / ' + k.open + ' 未結</span></div></div>' +
+        '<div class="kpi"><div class="k">公告待核定</div><div class="v num">' + (d.postsPending || 0) + '</div></div>' +
         '<div class="kpi"><div class="k">待你協助</div><div class="v num">' + d.help.length + '</div><div class="s">本月物料異常 ' + d.anom.total + '</div></div>' +
         '<div class="kpi"><div class="k">今日外出</div><div class="v num">' + k.out + '</div><div class="s">請假 ' + k.leave + '</div></div>' +
         '<div class="kpi"><div class="k">本週週誌</div><div class="v num">' + k.jSent + '<span class="s"> / ' + k.jTotal + '</span></div><div class="s">待閱 ' + k.jUnread + '</div></div></div>';
@@ -462,7 +463,31 @@
       view().innerHTML = h;
     }).catch(failView);
   }
-  var VIEWS = { home: loadHome, sched: loadSched, journal: loadJournal, todos: loadTodos, brief: loadBrief };
+  /* ---------- 版本公告 ---------- */
+  function postHtml(p, mode) {
+    var h = '<div class="item"><div class="row"><span class="chip">' + esc(p.cat) + '</span><b>' + esc(p.title) + '</b></div><div class="small muted">' + esc(p.at.slice(5)) + '・' + esc(p.by) + (mode === 'mine' ? '・' + esc(p.state) : '') + '</div>' +
+      (p.body ? '<div class="pre">' + esc(p.body) + '</div>' : '');
+    h += '<div class="btns">';
+    if (p.fileUrl) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(p.fileUrl) + '">開啟檔案' + (p.fileName ? '：' + esc(p.fileName.slice(0, 18)) : '') + '</a>';
+    if (mode === 'pending') h += '<button class="btn sm primary" data-act="p-approve" data-id="' + esc(p.id) + '">核定並公告</button><button class="btn sm danger" data-act="p-reject" data-id="' + esc(p.id) + '">退回</button>';
+    else if (mode === 'live' && S.me.role !== 'director') h += p.acked ? '<span class="chip good">已確認</span>' : '<button class="btn sm primary" data-act="p-ack" data-id="' + esc(p.id) + '">我已閱讀並了解</button>';
+    h += '</div>';
+    if (mode === 'live' && S.me.role === 'director') h += '<div class="small ' + (p.ackN < p.ackTotal ? 'muted' : 'up') + '">已確認 ' + p.ackN + ' / ' + p.ackTotal + (p.waiting.length ? '；還沒確認：' + esc(p.waiting.slice(0, 12).join('、')) + (p.waiting.length > 12 ? '…' : '') : '') + '</div>';
+    return h + '</div>';
+  }
+  function loadPosts() {
+    swr('posts.list', {}, function (d) {
+      S.data.cats = d.cats;
+      var cat = S.pcat || '', list = d.posts.filter(function (p) { return !cat || p.cat === cat; });
+      var h = '<div class="row"><div class="sec"><h2>版本公告' + (d.unread && S.me.role !== 'director' ? '（' + d.unread + ' 則未確認）' : '') + '</h2></div><button class="btn sm right" data-act="p-new">＋ 新增公告</button></div>';
+      if (d.pending && d.pending.length) h += '<div class="sec"><h2>待你核定（' + d.pending.length + '）</h2></div><div class="card">' + d.pending.map(function (p) { return postHtml(p, 'pending'); }).join('') + '</div>';
+      if (d.mine && d.mine.length) h += '<div class="sec"><h2>我送出的</h2></div><div class="card">' + d.mine.map(function (p) { return postHtml(p, 'mine'); }).join('') + '</div>';
+      h += seg('pcat', [['', '全部']].concat(d.cats.map(function (c) { return [c, c]; })), cat);
+      h += list.length ? '<div class="card">' + list.map(function (p) { return postHtml(p, 'live'); }).join('') + '</div>' : '<div class="empty">目前沒有公告</div>';
+      view().innerHTML = h;
+    });
+  }
+  var VIEWS = { posts: loadPosts, home: loadHome, sched: loadSched, journal: loadJournal, todos: loadTodos, brief: loadBrief };
 
   /* ---------- 事件 ---------- */
   var A = {
@@ -487,6 +512,7 @@
     seg: function (b) {
       var n = b.dataset.name, v = b.dataset.v;
       if (n === 'scope') { S.sched.scope = v; return loadSched(); }
+      if (n === 'pcat') { S.pcat = v; return loadPosts(); }
       if (!SP) return;
       SP[n] = v; refreshForm();
     },
@@ -526,6 +552,26 @@
         body.innerHTML = ''; body.appendChild(img);
       }).catch(function (e) { body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     },
+    'p-new': function () {
+      var dir = S.me.role === 'director';
+      openSheet('新增公告', '<label class="f">類別<select id="pn-cat">' + (S.data.cats || []).map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="f">標題<input type="text" id="pn-title" maxlength="80" placeholder="例：冬季新品 SOP v2"></label>' +
+        '<label class="f">這次改了什麼（選填）<textarea id="pn-body" maxlength="3000"></textarea></label>' +
+        '<label class="f">檔案連結（選填，雲端硬碟的分享連結）<input type="text" id="pn-url" maxlength="500" placeholder="https://"></label>' +
+        '<div class="note">' + (dir ? '你可以直接公告，或先存成待核定。' : '送出後要等營運總監核定才會公告。') + '</div>' +
+        '<div class="btns">' + (dir ? '<button class="btn primary grow" data-act="p-add" data-publish="1">直接公告</button><button class="btn grow" data-act="p-add">存成待核定</button>' : '<button class="btn primary block" data-act="p-add">送出待核定</button>') + '</div>');
+    },
+    'p-add': function (b) {
+      var body = topBody(), f = { cat: body.querySelector('#pn-cat').value, title: body.querySelector('#pn-title').value.trim(), body: body.querySelector('#pn-body').value.trim(), fileUrl: body.querySelector('#pn-url').value.trim(), publish: b.dataset.publish === '1' };
+      if (!f.title) return toast('請填寫標題');
+      busy(b, api('post.add', f)).then(function (r) { closeSheet(); toast(r.published ? '已公告' : '已送出，等待核定'); loadPosts(); }).catch(oops);
+    },
+    'p-approve': function (b) { busy(b, api('post.decide', { id: b.dataset.id, approve: true })).then(function () { toast('已公告'); loadPosts(); }).catch(oops); },
+    'p-reject': function (b) {
+      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = '再按一次確認退回'; return; }
+      busy(b, api('post.decide', { id: b.dataset.id, approve: false })).then(function () { toast('已退回'); loadPosts(); }).catch(oops);
+    },
+    'p-ack': function (b) { busy(b, api('post.ack', { id: b.dataset.id })).then(function () { toast('已確認'); loadPosts(); }).catch(oops); },
     'x-note': function (b) {
       openSheet('補充說明', '<p class="muted small">寫下這個案件的實際狀況。內容只存在工作台，總監看得到，不會寫回原系統。</p><label class="f">實際狀況<textarea id="xn-text" maxlength="800" placeholder="例：廠商已來看過兩次仍未修好，門市用備用機撐著"></textarea></label>' +
         (S.me.role === 'director' ? '' : '<div class="pick"><label><input type="checkbox" id="xn-help">需要總監協助跨部門溝通</label></div>') +

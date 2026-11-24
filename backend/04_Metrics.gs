@@ -42,6 +42,7 @@ function warmCache() {
   const today = today_(), cache = CacheService.getScriptCache();
   const out = computeMetrics_(today);
   try { cache.put('metrics:' + today, JSON.stringify(out), 2700); } catch (e) { /* 忽略 */ }
+  try { scanPostFolders_(); } catch (e) { console.error('公告資料夾掃描失敗：' + e.message); }
   try { putExternal_(readExternal_()); } catch (e) { console.error('既有系統讀取失敗：' + e.message); }
   if (prop_('MASTER_SHEET_ID')) { try { cache.put('masterStores', JSON.stringify(masterStores_()), 2700); } catch (e) { console.error('門店資料表讀取失敗：' + e.message); } }
 }

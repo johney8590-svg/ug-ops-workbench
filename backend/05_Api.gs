@@ -35,7 +35,7 @@ function todoView_(t, today) {
   return { id: t.id, store: t.store, source: t.source, dept: t.dept, text: t.text, status: t.status, by: yes_(t.ext) ? '門市' : nameOf_(t.by),
     createdAt: String(t.createdAt).slice(0, 10), days: todoDays_(t, today), late: todoLate_(t, today),
     notes: xn || J_(t.notes, []), help: !!xn && xn.some(function (n) { return n.help && !n.done; }), nudgedToday: t.nudgedAt === today, hasPhoto: !!t.photoId,
-    ext: yes_(t.ext), sys: yes_(t.ext) ? EXT_SYSTEMS[t.source].sys : '', url: yes_(t.ext) ? EXT_SYSTEMS[t.source].url : '' };
+    ext: yes_(t.ext), sys: yes_(t.ext) ? EXT_SYSTEMS[t.source].sys : '', url: yes_(t.ext) ? extUrl_(t) : '' };
 }
 function camSlots_(store, wk, visits) {
   const end = addDays_(wk, 6), seen = {};
@@ -478,6 +478,7 @@ function brief_(me) {
     kpi: { y: y, yTarget: hasT && yT ? yT : null, ach: hasT && yT ? Math.round(y / yT * 100) : null, ch: a4 ? Math.round((y - a4) / a4 * 1000) / 10 : null, stores: stores.length,
       open: open.length, late: late.length, out: people.filter(function (p) { return ['巡店', '外出', '訓練'].indexOf(p.type) >= 0; }).length, leave: people.filter(function (p) { return p.type === '請假'; }).length,
       jSent: js.filter(function (j) { return j && j.state === '已送出'; }).length, jUnread: js.filter(function (j) { return j && j.state === '已送出' && !j.readAt; }).length, jTotal: sups.length },
+    postsPending: Store.rows('posts').filter(function (p) { return p.state === '待核定'; }).length,
     late: late.slice(0, 40), gap: gap.slice(0, 40), need: need.slice(0, 40), people: people,
     help: c.todos.concat(c.anom).filter(function (t) { return yes_(t.ext); }).map(function (t) { return todoView_(t, c.today); }).filter(function (v) { return v.help; }),
     anom: (function () { const n = {}; c.anom.forEach(function (t) { n[t.store] = (n[t.store] || 0) + 1; });

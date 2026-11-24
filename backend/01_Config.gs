@@ -14,6 +14,8 @@ const TABS = {
   qsc:      ['store', 'date', 'score', 'by', 'fails'],
   specials: ['store', 'date', 'amount', 'note'],
   extnotes: ['id', 'caseId', 'store', 'at', 'by', 'text', 'help', 'doneAt', 'doneBy', 'reply'],
+  posts:    ['id', 'cat', 'title', 'body', 'fileId', 'fileName', 'fileUrl', 'fileUpdated', 'state', 'createdAt', 'createdBy', 'approvedAt', 'approvedBy'],
+  postacks: ['postId', 'account', 'at'],
   sessions: ['tokenHash', 'account', 'expires'],
   log:      ['at', 'account', 'action', 'detail']
 };

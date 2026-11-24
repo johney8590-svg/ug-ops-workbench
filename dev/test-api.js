@@ -206,6 +206,46 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   ok(e4.books.REPAIR._sheets.repairs._rows.length === 4 && e4.books.ANOMALY._sheets.cases._rows.length === 4 && e4.books.PROMO._sheets.cases._rows.length === 3, '外部案件：三套系統的資料沒有被改動');
 }
 
+// --- 版本公告 ---
+{
+  const e5 = seed(load({ props: { ANN_FOLDER_TRAINING: 'TRAIN' } }), { sample: false });
+  const c5 = (action, data, token) => JSON.parse(e5.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tk = a => c5('login', { account: a, password: 'ugdemo1234' }).data.token;
+  const tj = tk('jill'), tr = tk('robert'), tm = tk('marketing');
+  r = c5('post.add', { cat: '八卦', title: 'x' }, tm); ok(!r.ok, '公告：類別不對被拒');
+  r = c5('post.add', { cat: '行銷', title: '冬季活動 DM', fileUrl: 'javascript:alert(1)' }, tm); ok(!r.ok, '公告：非 https 連結被拒', r);
+  r = c5('post.add', { cat: '行銷', title: '冬季活動 DM', body: '12/1 起跑', fileUrl: 'https://drive.google.com/x', publish: true }, tm); ok(r.ok && r.data.published === false, '公告：非總監送出只會是待核定', r);
+  r = c5('posts.list', {}, tj); ok(r.ok && r.data.posts.length === 0 && r.data.pending === undefined, '公告：未核定的同仁看不到', r);
+  r = c5('posts.list', {}, tr); ok(r.data.pending.length === 1, '公告：總監看到待核定'); const pid = r.data.pending[0].id;
+  r = c5('post.decide', { id: pid, approve: true }, tm); ok(!r.ok && r.code === 'forbidden', '公告：只有總監能核定');
+  r = c5('post.decide', { id: pid, approve: true }, tr); ok(r.ok, '公告：總監核定', r);
+  r = c5('posts.list', {}, tj); ok(r.data.posts.length === 1 && r.data.unread === 1 && !r.data.posts[0].acked, '公告：核定後同仁看到、未確認');
+  r = c5('post.ack', { id: pid }, tj); c5('post.ack', { id: pid }, tj);
+  r = c5('posts.list', {}, tj); ok(r.data.unread === 0 && r.data.posts[0].acked, '公告：確認後不再算未讀');
+  r = c5('posts.list', {}, tr); ok(r.data.posts[0].ackN === 1 && r.data.posts[0].ackTotal === 10 && r.data.posts[0].waiting.length === 9, '公告：總監看到確認率', r.data.posts[0]);
+  // 雲端資料夾：第一次掃描只記基準，之後有更新才產生待核定
+  e5.folders.TRAIN = [{ id: 'F1', name: '開班 SOP.pdf', updated: Date.now() - 86400e3 }];
+  ok(e5.gas.scanPostFolders_() === 0, '公告：第一次掃描不補發舊檔');
+  e5.folders.TRAIN.push({ id: 'F2', name: '閉店 SOP v3.pdf', updated: Date.now() + 60e3 });
+  ok(e5.gas.scanPostFolders_() === 1, '公告：資料夾有新檔自動產生待核定');
+  e5.gas.Store.reset();
+  r = c5('posts.list', {}, tr); ok(r.data.pending.length === 1 && r.data.pending[0].cat === '訓練' && /閉店 SOP v3/.test(r.data.pending[0].title) && r.data.pending[0].by === '雲端檔案更新', '公告：自動產生的待核定內容', r.data.pending);
+  r = c5('post.decide', { id: r.data.pending[0].id, approve: false }, tr); ok(r.ok, '公告：總監退回');
+  r = c5('posts.list', {}, tj); ok(r.data.posts.length === 1, '公告：退回的不會公告');
+}
+// --- 連回原系統的網址只給總監與處理單位 ---
+{
+  const e6 = seed(load({ props: { REPAIR_SHEET_ID: 'REPAIR', REPAIR_ADMIN_URL: 'https://example.com/repair/?m=KEY' } }), { sample: false });
+  const rp = e6.books.REPAIR.insertSheet('repairs');
+  rp.appendRow(['id', 'createdAt', 'store', 'supervisor', 'occurDate', 'equipment', 'description', 'status', 'handleUnit']);
+  rp.appendRow(['R1', '2026-11-20T02:00:00.000Z', '台北信義店', 'x', '2026-11-20', '製冰機', '壞了', '處理中', '工務']);
+  const c6 = (action, data, token) => JSON.parse(e6.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tk = a => c6('login', { account: a, password: 'ugdemo1234' }).data.token;
+  r = c6('todo.list', {}, tk('jill')); ok(r.data.todos[0].url === '', '管理網址：督導拿不到', r.data.todos[0]);
+  r = c6('todo.list', {}, tk('gongwu')); ok(r.data.todos[0].url === 'https://example.com/repair/?m=KEY&case=R1', '管理網址：處理單位拿到並帶案件編號', r.data.todos[0].url);
+  r = c6('todo.list', {}, tk('robert')); ok(/case=R1$/.test(r.data.todos[0].url), '管理網址：總監拿到');
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

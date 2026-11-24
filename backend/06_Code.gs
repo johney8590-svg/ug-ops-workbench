@@ -26,6 +26,10 @@ const ACTIONS = {
   'cal.reset':     { fn: calReset_ },
   'ext.note':      { fn: extNote_ },
   'ext.resolve':   { fn: extResolve_ },
+  'posts.list':    { fn: postsList_ },
+  'post.add':      { fn: postAdd_ },
+  'post.decide':   { fn: postDecide_ },
+  'post.ack':      { fn: postAck_ },
   'brief':         { fn: brief_ }
 };
 
@@ -35,6 +39,7 @@ function route_(req) {
   if (action === 'login') return login_(d);
   if (action === 'logout') return logout_(req.token);
   const me = auth_(req.token);
+  VIEWER_ = me;
   const a = Object.prototype.hasOwnProperty.call(ACTIONS, action) ? ACTIONS[action] : null;
   if (!a) fail_('不支援的操作');
   // 還沒改掉初始密碼的人，只能查自己和改密碼

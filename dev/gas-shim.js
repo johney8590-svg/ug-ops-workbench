@@ -33,7 +33,7 @@ function load(opts) {
   opts = opts || {};
   const books = { DATA: makeBook(), DASH: makeBook(), MASTER: makeBook(), REPAIR: makeBook(), ANOMALY: makeBook(), PROMO: makeBook() };
   const props = Object.assign({ DATA_SHEET_ID: 'DATA', DASHBOARD_SHEET_ID: 'DASH' }, opts.props || {});
-  const cache = {}, files = {}, mails = [];
+  const cache = {}, files = {}, mails = [], folders = {};
   const pad = n => ('0' + n).slice(-2);
   const sandbox = {
     console,
@@ -56,7 +56,8 @@ function load(opts) {
       newBlob: (bytes, type, name) => ({ bytes, type, name })
     },
     DriveApp: {
-      getFolderById(id) { if (id !== props.PHOTO_FOLDER_ID) throw new Error('no folder'); return { createFile(blob) { const fid = 'F' + crypto.randomUUID(); files[fid] = blob; return { getId: () => fid }; } }; },
+      getFolderById(id) { if (folders[id]) { const iter = a => { let i = 0; return { hasNext: () => i < a.length, next: () => a[i++] }; }; return { getFiles: () => iter(folders[id].map(f => ({ getId: () => f.id, getName: () => f.name, getUrl: () => 'https://drive.google.com/file/d/' + f.id, getLastUpdated: () => new Date(f.updated) }))), getFolders: () => iter([]) }; }
+        if (id !== props.PHOTO_FOLDER_ID) throw new Error('no folder'); return { createFile(blob) { const fid = 'F' + crypto.randomUUID(); files[fid] = blob; return { getId: () => fid }; } }; },
       getFileById(id) { const b = files[id]; if (!b) throw new Error('no file'); return { getBlob: () => ({ getContentType: () => b.type, getBytes: () => b.bytes }) }; }
     },
     MailApp: { sendEmail(to, subject, body) { mails.push({ to, subject, body }); } },
@@ -64,9 +65,9 @@ function load(opts) {
   };
   const dir = path.join(__dirname, '..', 'backend');
   const src = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).sort().map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n') +
-    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_ };';
+    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_ };';
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: 'backend.gs' });
-  return { gas: sandbox.__gas, books, props, cache, files, mails };
+  return { gas: sandbox.__gas, books, props, cache, files, mails, folders };
 }
 module.exports = { load };

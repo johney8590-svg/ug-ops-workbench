@@ -106,7 +106,7 @@ const URL_ = 'http://localhost:' + process.env.PORT + '/';
 
   // ---- 部門窗口 ----
   p = await open(); await login(p, 'gongwu');
-  ok(await p.locator('nav.tabs button').count() === 2, '部門只有待辦與行程');
+  ok(await p.locator('nav.tabs button').count() === 3, '部門有待辦、行程、公告');
   await p.waitForSelector('[data-act=t-done]');
   ok((await p.textContent('#view')).includes('冷氣漏水') && !(await p.textContent('#view')).includes('鮮乳'), '只看到工務的單');
   await shot(p, '8-dept');
@@ -118,6 +118,11 @@ const URL_ = 'http://localhost:' + process.env.PORT + '/';
 
   // ---- 總監 ----
   p = await open(); await login(p, 'robert');
+  await p.click('[data-tab=posts]'); await p.waitForSelector('[data-act=p-new]'); await p.click('[data-act=p-new]');
+  await p.fill('#pn-title', '冬季新品 SOP v2'); await p.fill('#pn-body', '糖度調整'); await p.click('[data-act=p-add][data-publish="1"]');
+  await p.waitForFunction(() => /冬季新品 SOP v2/.test(document.getElementById('view').textContent) && /已確認 0 \/ 10/.test(document.getElementById('view').textContent));
+  ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '公告頁沒有水平捲動（六個分頁）'); await shot(p, '12-posts');
+  await p.click('[data-tab=brief]');
   await p.waitForSelector('.kpis'); ok(/需關注門市/.test(await p.textContent('#view')) && /台北公館店/.test(await p.textContent('#view')), '晨報');
   ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '晨報沒有水平捲動');
   await shot(p, '9-brief');
