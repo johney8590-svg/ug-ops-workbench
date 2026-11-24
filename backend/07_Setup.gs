@@ -83,9 +83,13 @@ function handout_(rows) {
 function issuePasswords() {
   const out = [];
   withLock_(function () {
-    Store.rows('people').filter(function (p) { return p.account && !p.pwHash; }).forEach(function (p) {
+    const todo = Store.rows('people').filter(function (p) { return p.account && !p.pwHash; });
+    // 先全部檢查完再動手：中途才發現錯誤的話，前面幾個帳號會被設了密碼卻沒有留下紀錄
+    todo.forEach(function (p) {
       if (ROLES.indexOf(p.role) < 0) throw new Error(p.account + ' 的 role 必須是 director、supervisor 或 dept');
       if (p.account !== String(p.account).toLowerCase()) throw new Error('帳號請用小寫：' + p.account);
+    });
+    todo.forEach(function (p) {
       const pw = randomPassword_();
       setPassword_(p, pw);
       out.push({ account: p.account, name: p.name, pw: pw });
