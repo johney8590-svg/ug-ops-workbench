@@ -6,16 +6,17 @@
 /* ---------- 共用 ---------- */
 function ctx_() {
   const today = today_();
-  return { today: today, wk: monday_(today), M: metrics_(), visits: Store.rows('visits'), todos: Store.rows('todos'), events: Store.rows('events') };
+  return { today: today, wk: monday_(today), M: metrics_(), visits: Store.rows('visits'), todos: allTodos_(), events: Store.rows('events') };
 }
 function nameOf_(account) { const p = person_(account); return p ? p.name : account; }
 function isOpenTodo_(t) { return t.status !== '已完成'; }
 function todoDays_(t, today) { return Math.max(0, diffDays_(String(t.createdAt).slice(0, 10), today)); }
 function todoLate_(t, today) { return isOpenTodo_(t) && todoDays_(t, today) > ((SOURCES[t.source] || SOURCES['其他']).limit); }
 function todoView_(t, today) {
-  return { id: t.id, store: t.store, source: t.source, dept: t.dept, text: t.text, status: t.status, by: nameOf_(t.by),
+  return { id: t.id, store: t.store, source: t.source, dept: t.dept, text: t.text, status: t.status, by: yes_(t.ext) ? '門市' : nameOf_(t.by),
     createdAt: String(t.createdAt).slice(0, 10), days: todoDays_(t, today), late: todoLate_(t, today),
-    notes: J_(t.notes, []), nudgedToday: t.nudgedAt === today, hasPhoto: !!t.photoId };
+    notes: J_(t.notes, []), nudgedToday: t.nudgedAt === today, hasPhoto: !!t.photoId,
+    ext: yes_(t.ext), sys: yes_(t.ext) ? EXT_SYSTEMS[t.source].sys : '', url: yes_(t.ext) ? EXT_SYSTEMS[t.source].url : '' };
 }
 function camSlots_(store, wk, visits) {
   const end = addDays_(wk, 6), seen = {};
@@ -179,7 +180,7 @@ function todoAdd_(me, d) {
   if (!text) fail_('請用一句話說明狀況');
   const source = SOURCES[d.source] ? d.source : guessSource_(text);
   const today = today_();
-  const dupes = Store.rows('todos').filter(function (t) { return t.store === store && t.source === source && isOpenTodo_(t) && todoDays_(t, today) <= DEDUPE_DAYS; });
+  const dupes = allTodos_().filter(function (t) { return t.store === store && t.source === source && isOpenTodo_(t) && todoDays_(t, today) <= DEDUPE_DAYS; });
   if (dupes.length && !d.force) return { dupes: dupes.map(function (t) { return todoView_(t, today); }), source: source, dept: SOURCES[source].dept };
   const prefix = { '修繕': 'RP', '物料異常': 'MA', '文宣': 'PR', '其他': 'TD' }[source];
   const id = uid_(prefix);
@@ -219,7 +220,7 @@ function todoStatus_(me, d) {
 }
 function todoList_(me, d) {
   const today = today_();
-  let list = Store.rows('todos').filter(function (t) { return canSeeTodo_(me, t); });
+  let list = allTodos_().filter(function (t) { return canSeeTodo_(me, t); });
   if (!d.all) list = list.filter(isOpenTodo_);
   return { today: today, todos: list.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return (b.late - a.late) || (b.days - a.days); }).slice(0, 300) };
 }

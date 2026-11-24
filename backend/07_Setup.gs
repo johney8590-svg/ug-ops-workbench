@@ -135,6 +135,12 @@ function checkSetup() {
   stores.forEach(function (s) { const k = s.supervisor || ('未對應：' + (s.supName || '主檔未填')); bySup[k] = (bySup[k] || 0) + 1; if (M.asOf && !mOf_(M, s.store)) noMetric.push(s.store); });
   Object.keys(bySup).sort().forEach(function (k) { console.log('  ' + k + '：' + bySup[k] + ' 間'); });
   console.log('主檔有、儀表板沒有營收的門市（' + noMetric.length + '）：' + noMetric.join('、'));
+  try {
+    const ext = readExternal_(), n = {}, known = {}, miss = {};
+    stores.forEach(function (x) { known[normStore_(x.store)] = 1; });
+    ext.forEach(function (t) { n[t.source] = (n[t.source] || 0) + 1; if (!known[normStore_(t.store)]) miss[t.store] = 1; });
+    console.log('既有系統未結案：' + JSON.stringify(n) + '；門市名稱對不上主檔的：' + (Object.keys(miss).join('、') || '無') + '；暫存大小 ' + JSON.stringify(ext).length);
+  } catch (e) { console.log('既有系統讀取失敗：' + e.message); }
   const people = Store.rows('people');
   console.log('帳號 ' + people.length + ' 個，其中已設定密碼 ' + people.filter(function (p) { return p.pwHash; }).length + ' 個');
 }

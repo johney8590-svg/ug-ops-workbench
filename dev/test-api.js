@@ -152,6 +152,44 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c3('home', { as: 'robert' }, tr); ok(r.ok && r.data.cards.length === 1 && r.data.cards[0].store === '台北南京店', '主檔連動：總監看自己負責的門市', r);
 }
 
+// --- 既有系統的未結案案件（只讀）---
+{
+  const e4 = seed(load({ props: { REPAIR_SHEET_ID: 'REPAIR', ANOMALY_SHEET_ID: 'ANOMALY', PROMO_SHEET_ID: 'PROMO' } }), { sample: false });
+  const rp = e4.books.REPAIR.insertSheet('repairs');
+  rp.appendRow(['id', 'createdAt', 'store', 'supervisor', 'occurDate', 'equipment', 'description', 'status', 'handleUnit']);
+  rp.appendRow(['R20261110-0001', '2026-11-10T02:00:00.000Z', '台北信義店', '劉靜蓮 Jill', '2026-11-10', '製冰機', '不製冰', '處理中', '採購']);
+  rp.appendRow(['R20261120-0002', '2026-11-20T02:00:00.000Z', '台北信義', 'x', '2026-11-20', '招牌', '燈不亮', '已結案', '工務']);
+  rp.appendRow(['R20261122-0003', '2026-11-22T18:30:00.000Z', '板橋府中店', 'x', '2026-11-22', '冷氣', '漏水', '待處理', '工務']);
+  const an = e4.books.ANOMALY.insertSheet('cases');
+  an.appendRow(['caseNo', 'date', 'store', 'name', 'mat', 'mfg', 'exp', 'qty', 'cls', 'desc', 'mediaUrls', 'handle', 'method', 'result', 'status', 'createdAt']);
+  an.appendRow(['A001', '2026/11/23', '台北信義', '小明', '鮮乳', '', '', '2', '少送', '少兩箱', '', '', '', '', 'pend', '2026-11-23T01:00:00.000Z']);
+  an.appendRow(['A002', '2026/11/01', '台北南京店', '小華', '杯蓋', '', '', '1', '破損', '', '', '', '', '', 'done', '2026-11-01T01:00:00.000Z']);
+  const pm = e4.books.PROMO.insertSheet('cases');
+  pm.appendRow(['caseNo', 'applyDate', 'dept', 'region', 'store', 'supervisor', 'phone', 'items', 'pos', 'amount', 'status', 'quote', 'actual', 'adminNote', 'createdAt']);
+  pm.appendRow(['PR001', '2026-11-15', '', '', '台北信義店', '', '', JSON.stringify([{ name: '冬季海報' }, { name: '立牌' }]), '', '', 1, '', '', '', '2026-11-15T03:00:00.000Z']);
+  pm.appendRow(['PR002', '2026-11-16', '', '', '台北信義店', '', '', '[]', '', '', 2, '', '', '', '2026-11-16T03:00:00.000Z']);
+  const c4 = (action, data, token) => JSON.parse(e4.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tk = a => c4('login', { account: a, password: 'ugdemo1234' }).data.token;
+  const tj = tk('jill'), tr = tk('robert'), tg = tk('gongwu'), tc = tk('caigou');
+  r = c4('store', { store: '台北信義店' }, tj);
+  const ids = r.ok ? r.data.todos.map(t => t.id).sort().join() : '';
+  ok(ids === 'A001,PR001,R20261110-0001', '外部案件：門市頁看到三套系統未結案的單，已結案的不顯示', r.data && r.data.todos);
+  const rep = r.data.todos.find(t => t.id === 'R20261110-0001') || {};
+  ok(rep.ext && rep.sys === '修繕系統' && rep.dept === '採購' && rep.days === 14 && rep.late && /製冰機：不製冰/.test(rep.text), '外部案件：修繕單的單位、天數、逾期', rep);
+  const pr1 = r.data.todos.find(t => t.id === 'PR001') || {};
+  ok(pr1.text === '文宣申請：冬季海報、立牌' && pr1.status === '設計中', '外部案件：文宣品項與狀態', pr1);
+  ok((r.data.todos.find(t => t.id === 'A001') || {}).status === '待處理', '外部案件：物料異常狀態中文');
+  r = c4('home', {}, tj); ok(r.data.cards.find(x => x.store === '台北信義店').open === 3, '外部案件：計入門市卡片的待辦數', r.data.cards.find(x => x.store === '台北信義店'));
+  r = c4('todo.list', {}, tj); ok(r.data.todos.length === 3, '外部案件：督導只看到自己門市的', r.data.todos.map(t => t.id));
+  r = c4('todo.list', {}, tg); ok(r.data.todos.map(t => t.id).join() === 'R20261122-0003', '外部案件：工務只看到指派給工務的', r.data.todos.map(t => t.id));
+  r = c4('todo.list', {}, tc); ok(r.data.todos.map(t => t.id).sort().join() === 'A001,R20261110-0001', '外部案件：採購看到指派給採購的', r.data.todos.map(t => t.id));
+  r = c4('brief', {}, tr); ok(r.data.kpi.open === 4 && r.data.late.some(t => t.id === 'R20261110-0001'), '外部案件：進晨報', r.data.kpi);
+  r = c4('todo.nudge', { id: 'R20261110-0001' }, tj); ok(!r.ok, '外部案件：不能在工作台催辦（不寫回原系統）', r);
+  r = c4('todo.status', { id: 'R20261122-0003', status: '已完成' }, tg); ok(!r.ok, '外部案件：不能在工作台結案');
+  r = c4('todo.add', { store: '台北信義店', text: '製冰機又壞了' }, tj); ok(r.ok && r.data.dupes && r.data.dupes[0].ext && r.data.dupes[0].id === 'R20261110-0001', '外部案件：回報時提醒修繕系統已有單', r);
+  ok(e4.books.REPAIR._sheets.repairs._rows.length === 4 && e4.books.ANOMALY._sheets.cases._rows.length === 3 && e4.books.PROMO._sheets.cases._rows.length === 3, '外部案件：三套系統的資料沒有被改動');
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

@@ -181,6 +181,11 @@
     if (t.notes.length) h += '<div class="small muted pre">' + t.notes.slice(-3).map(function (n) { return esc(n.at.slice(5, 16)) + ' ' + esc(n.by) + '：' + esc(n.text); }).join('\n') + '</div>';
     h += '<div class="btns">';
     var id = ' data-id="' + esc(t.id) + '"';
+    if (t.ext) {                                      // 既有系統的單：這裡只看，處理要回原系統
+      h += '<span class="chip">' + esc(t.sys) + '・' + esc(t.id) + '</span>';
+      if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">到' + esc(t.sys) + '處理</a>';
+      return h + '</div></div>';
+    }
     if (S.me.role === 'dept') {
       if (t.status === '待受理') h += '<button class="btn sm" data-act="t-status" data-status="處理中"' + id + '>受理</button>';
       if (t.status !== '已完成') h += '<button class="btn sm primary" data-act="t-done"' + id + '>完成</button>';
@@ -317,7 +322,7 @@
       .then(function (r) {
         if (r.dupes) {
           b.querySelector('#rp-dupes').innerHTML = '<div class="note bad">這間店最近已經有 ' + r.dupes.length + ' 筆「' + esc(r.source) + '」還沒結案，可能是同一件事：</div><div class="card">' +
-            r.dupes.map(function (t) { return '<div class="item"><b>' + esc(t.text) + '</b><div class="small muted">' + esc(t.createdAt) + '・' + esc(t.by) + '・' + esc(t.status) + '</div><div class="btns"><button class="btn sm primary" data-act="report-merge" data-id="' + esc(t.id) + '">是同一件，補充到這張單</button></div></div>'; }).join('') +
+            r.dupes.map(function (t) { return '<div class="item"><b>' + esc(t.text) + '</b><div class="small muted">' + esc(t.createdAt) + '・' + esc(t.by) + '・' + esc(t.status) + '</div>' + (t.ext ? '<div class="small muted">這張單在' + esc(t.sys) + '（' + esc(t.id) + '）。同一件事就不用再報，要補充請到該系統。</div>' : '<div class="btns"><button class="btn sm primary" data-act="report-merge" data-id="' + esc(t.id) + '">是同一件，補充到這張單</button></div>') + '</div>'; }).join('') +
             '</div><div class="btns"><button class="btn block" data-act="report-force">不是同一件，另開新單</button></div>';
           return;
         }
