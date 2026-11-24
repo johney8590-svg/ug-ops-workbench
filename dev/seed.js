@@ -17,7 +17,7 @@ function seed(env, opts) {
   props.TEST_TODAY = TODAY;
   // 儀表板逐日資料
   const dash = books.DASH.insertSheet('data');
-  dash.appendRow(['store', 'date', 'revenue', 'zone']);
+  dash.appendRow(['zone', 'store', 'date', 'year', 'month', 'dow', 'weather', 'revenue']);   // 與真實儀表板相同：日期是「月/日」，年份另一欄
   STORES.forEach(([s, z], i) => {
     const base = 26000 + (i * 7919) % 14000;
     for (let d = '2026-08-01'; d < TODAY; d = add(d, 1)) {
@@ -26,7 +26,7 @@ function seed(env, opts) {
       if (d >= '2026-11-01') v *= 1.06;
       if (s === '台北公館店' && d >= '2026-11-02') v *= d >= '2026-11-16' ? 0.72 : d >= '2026-11-09' ? 0.85 : 0.95;   // 連續下滑
       if (s === '板橋府中店' && d >= '2026-11-17') v *= 0.8;                                                           // 落後區域
-      dash.appendRow([s, d, Math.round(v), z]);
+      dash.appendRow([z, s, d.slice(5, 7) + '/' + d.slice(8, 10), +d.slice(0, 4), +d.slice(5, 7), '', '晴', Math.round(v)]);
     }
   });
   gas.setup();

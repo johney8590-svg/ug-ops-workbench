@@ -8,10 +8,19 @@
  *  - 暫行目標：基期（預設 9、10 月）各星期別的平均日營收 × (1 + 成長率 5%)，
  *    基期先扣掉 specials 分頁登記的特殊狀況業績，公休日不計
  */
-function normDate_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
-  const m = String(v).trim().match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
-  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2) : '';
+function normDate_(v, year) {
+  const p2 = function (n) { return ('0' + n).slice(-2); };
+  const y = /^\d{4}$/.test(String(year == null ? '' : year).trim()) ? String(year).trim() : '';
+  if (v instanceof Date) {
+    const d = Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+    return y ? y + d.slice(4) : d;                      // 儀表板另有 year 欄時以它為準
+  }
+  const t = String(v == null ? '' : v).trim();
+  let m = t.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]);
+  m = t.match(/^(\d{1,2})[-\/.](\d{1,2})$/);           // 儀表板的日期是「月/日」，年份在 year 欄
+  if (m && y) return y + '-' + p2(m[1]) + '-' + p2(m[2]);
+  return '';
 }
 
 function metrics_() {
@@ -35,15 +44,16 @@ function computeMetrics_(today) {
   const vals = sh.getDataRange().getValues();
   const h = vals[0].map(function (x) { return String(x).trim().toLowerCase(); });
   const iS = h.indexOf('store'), iD = h.indexOf('date'), iR = h.indexOf('revenue'), iZ = h.indexOf('zone');
+  const iY = h.indexOf('year');
   if (iS < 0 || iD < 0 || iR < 0) return empty('營運儀表板資料欄位不符（需要 store、date、revenue）');
 
   const rev = {}, dashZone = {};
   const y = addDays_(today, -1);
   let latest = '';
   for (let i = 1; i < vals.length; i++) {
-    const s = String(vals[i][iS]).trim(), d = normDate_(vals[i][iD]);
+    const s = String(vals[i][iS]).trim(), d = normDate_(vals[i][iD], iY >= 0 ? vals[i][iY] : '');
     if (!s || !d) continue;
-    const r = Number(vals[i][iR]) || 0;
+    const r = Number(String(vals[i][iR]).replace(/,/g, '')) || 0;
     (rev[s] = rev[s] || {})[d] = (rev[s][d] || 0) + r;
     if (iZ >= 0) dashZone[s] = String(vals[i][iZ]).trim();
     if (d <= y && d > latest && r > 0) latest = d;
