@@ -115,6 +115,14 @@ function clearMetricsCache() { CacheService.getScriptCache().remove('metrics:' +
 function checkSetup() {
   const M = computeMetrics_(today_());
   console.log('營收資料：' + (M.asOf ? '更新到 ' + M.asOf + '，共 ' + Object.keys(M.stores).length + ' 間門市' : '讀不到（' + M.note + '）'));
+  if (!M.asOf) {
+    try {
+      const sh = SpreadsheetApp.openById(prop_('DASHBOARD_SHEET_ID')).getSheetByName(prop_('DASHBOARD_TAB') || 'data');
+      const v = sh.getRange(1, 1, 3, sh.getLastColumn()).getValues(), last = sh.getRange(sh.getLastRow(), 1, 1, sh.getLastColumn()).getValues()[0];
+      const show = function (row) { return row.slice(0, 9).map(function (x) { return (x instanceof Date ? 'Date:' + x.toISOString() : typeof x + ':' + String(x)).slice(0, 40); }).join(' | '); };
+      console.log('儀表板表頭：' + show(v[0])); console.log('第 2 列：' + show(v[1])); console.log('最後一列（第 ' + sh.getLastRow() + ' 列）：' + show(last));
+    } catch (e) { console.log('儀表板讀取失敗：' + e.message); }
+  }
   storesMemo_ = null; CacheService.getScriptCache().remove('masterStores');
   let stores;
   try { stores = prop_('MASTER_SHEET_ID') ? masterStores_() : activeStores_(); console.log('門市來源：' + (prop_('MASTER_SHEET_ID') ? '門店資料表（連動）' : 'stores 分頁') + '，共 ' + stores.length + ' 間'); }
