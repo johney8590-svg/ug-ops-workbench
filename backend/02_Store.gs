@@ -34,37 +34,59 @@ const Store = (function () {
   }
   function head(sh) { return sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String); }
 
-  /** 讀出整個分頁，每列是一個物件，_row 是試算表列號。同一次請求內會快取。 */
+  /**
+   * 讀出整個分頁，每列是一個物件，_row 是試算表列號。
+   * 為了速度，讀過的分頁會暫存 5 分鐘；任何經由程式的寫入都會立刻清掉暫存。
+   * （直接在試算表上手動改資料，最慢 5 分鐘後生效。）
+   */
+  const keys = {};
+  function sc() { return CacheService.getScriptCache(); }
+  function remember(tab, out) { const k = {}; out.forEach(function (o) { k[o._row] = o.__k; delete o.__k; }); keys[tab] = k; }
   function rows(tab) {
     if (cache[tab]) return cache[tab];
-    const vals = sheet(tab).getDataRange().getValues();
-    const h = vals[0].map(String);
-    const out = [];
-    for (let i = 1; i < vals.length; i++) {
-      if (vals[i].join('') === '') continue;
-      const o = { _row: i + 1 };
-      for (let c = 0; c < h.length; c++) o[h[c]] = norm(vals[i][c]);
-      out.push(o);
+    let out = null;
+    const hit = sc().get('tab:' + tab);
+    if (hit) { try { out = JSON.parse(hit); } catch (e) { out = null; } }
+    if (!out) {
+      const vals = sheet(tab).getDataRange().getValues();
+      const h = vals[0].map(String);
+      out = [];
+      for (let i = 1; i < vals.length; i++) {
+        if (vals[i].join('') === '') continue;
+        const o = { _row: i + 1, __k: String(norm(vals[i][0])) };
+        for (let c = 0; c < h.length; c++) o[h[c]] = norm(vals[i][c]);
+        out.push(o);
+      }
+      const json = JSON.stringify(out);
+      if (json.length < 95000) { try { sc().put('tab:' + tab, json, 300); } catch (e) { /* 太大就不暫存 */ } }
     }
+    remember(tab, out);
     cache[tab] = out;
     return out;
+  }
+  function invalidate(tab) { delete cache[tab]; delete keys[tab]; try { sc().remove('tab:' + tab); } catch (e) { /* 忽略 */ } }
+  /** 暫存的列號可能因為有人手動刪列而對不上：寫入前先核對第一欄，對不上就請使用者重試，絕不寫錯列。 */
+  function guard(tab, row, actual) {
+    const k = keys[tab];
+    if (k && k[row] !== undefined && String(norm(actual)) !== k[row]) { invalidate(tab); fail_('資料剛被更新，請再操作一次', 'retry'); }
   }
   function append(tab, obj) {
     const sh = sheet(tab);
     sh.appendRow(head(sh).map(function (k) { return ser(obj[k]); }));
-    delete cache[tab];
+    invalidate(tab);
   }
   function update(tab, row, patch) {
     const sh = sheet(tab);
     const h = head(sh);
     const rng = sh.getRange(row, 1, 1, h.length);
     const cur = rng.getValues()[0].map(norm);
+    guard(tab, row, cur[0]);
     h.forEach(function (k, i) { if (Object.prototype.hasOwnProperty.call(patch, k)) cur[i] = ser(patch[k]); });
     rng.setValues([cur]);
-    delete cache[tab];
+    invalidate(tab);
   }
-  function remove(tab, row) { sheet(tab).deleteRow(row); delete cache[tab]; }
-  function reset() { Object.keys(cache).forEach(function (k) { delete cache[k]; }); book = null; }
+  function remove(tab, row) { const sh = sheet(tab); guard(tab, row, sh.getRange(row, 1, 1, 1).getValues()[0][0]); sh.deleteRow(row); invalidate(tab); }
+  function reset() { Object.keys(TABS).forEach(invalidate); book = null; }
 
   return { rows: rows, append: append, update: update, remove: remove, ss: ss, reset: reset };
 })();

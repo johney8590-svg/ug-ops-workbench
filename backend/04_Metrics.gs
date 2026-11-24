@@ -30,8 +30,19 @@ function metrics_() {
   const hit = cache.get(key);
   if (hit) return JSON.parse(hit);
   const out = computeMetrics_(today);
-  try { cache.put(key, JSON.stringify(out), 1800); } catch (e) { /* 超過快取大小就不快取 */ }
+  try { cache.put(key, JSON.stringify(out), 2700); } catch (e) { /* 超過快取大小就不快取 */ }
   return out;
+}
+
+/**
+ * 預先算好營收指標與門市主檔。設定成每 30 分鐘自動執行（時間觸發條件）後，
+ * 同仁開頁面時永遠拿到算好的結果，不會有人剛好碰到重算而多等幾秒。
+ */
+function warmCache() {
+  const today = today_(), cache = CacheService.getScriptCache();
+  const out = computeMetrics_(today);
+  try { cache.put('metrics:' + today, JSON.stringify(out), 2700); } catch (e) { /* 忽略 */ }
+  if (prop_('MASTER_SHEET_ID')) { try { cache.put('masterStores', JSON.stringify(masterStores_()), 2700); } catch (e) { console.error('門店資料表讀取失敗：' + e.message); } }
 }
 
 function computeMetrics_(today) {
@@ -41,8 +52,10 @@ function computeMetrics_(today) {
   let sh;
   try { sh = SpreadsheetApp.openById(id).getSheetByName(prop_('DASHBOARD_TAB') || 'data'); } catch (e) { return empty('無法開啟營運儀表板資料表'); }
   if (!sh) return empty('營運儀表板找不到資料分頁');
-  const vals = sh.getDataRange().getValues();
-  const h = vals[0].map(function (x) { return String(x).trim().toLowerCase(); });
+  // 只讀需要的欄位（表頭先讀一列，再讀到用得到的最後一欄為止），大表才不會慢
+  const h = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim().toLowerCase(); });
+  const need = ['store', 'date', 'revenue', 'zone', 'year'].map(function (k) { return h.indexOf(k); });
+  const vals = sh.getRange(1, 1, sh.getLastRow(), Math.max.apply(null, need) + 1).getValues();
   const iS = h.indexOf('store'), iD = h.indexOf('date'), iR = h.indexOf('revenue'), iZ = h.indexOf('zone');
   const iY = h.indexOf('year');
   if (iS < 0 || iD < 0 || iR < 0) return empty('營運儀表板資料欄位不符（需要 store、date、revenue）');

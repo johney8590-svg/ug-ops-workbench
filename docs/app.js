@@ -4,7 +4,8 @@
 (function () {
   'use strict';
   var API = (window.UG_CONFIG && window.UG_CONFIG.API_URL) || '';
-  var KEY = 'ug-ops-token';
+  var KEY = 'ug-ops-token', MEKEY = 'ug-ops-me';
+  var C = {};                          // 上次拿到的畫面資料：切換分頁時先顯示，再背景更新
   var WD = ['日', '一', '二', '三', '四', '五', '六'];
   var S = { token: null, me: null, today: '', tab: '', as: '', home: null, sched: { from: '', scope: 'mine' }, jweek: '', data: {} };
   var SP = null;                       // 目前開著的門市頁狀態
@@ -43,7 +44,15 @@
         throw e;
       });
   }
-  function setToken(t) { S.token = t; try { if (t) localStorage.setItem(KEY, t); else localStorage.removeItem(KEY); } catch (e) { /* 忽略 */ } }
+  function setToken(t) { S.token = t; if (!t) C = {}; try { if (t) localStorage.setItem(KEY, t); else { localStorage.removeItem(KEY); localStorage.removeItem(MEKEY); } } catch (e) { /* 忽略 */ } }
+  function nowTaipei() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
+  /** 先用上次的資料把畫面畫出來，同時向伺服器要最新的，回來再更新一次。 */
+  function swr(action, data, render) {
+    var tab = S.tab, k = action + '|' + JSON.stringify(data || {});
+    if (C[k]) render(C[k]); else loading();
+    return api(action, data).then(function (d) { C[k] = d; if (d && d.today) S.today = d.today; if (S.tab === tab && !stack.length) render(d); else if (S.tab === tab) S.dirty = true; })
+      .catch(function (e) { if (!C[k]) failView(e); });
+  }
   function oops(e) { toast(e && e.message ? e.message : '發生錯誤'); }
   function busy(btn, p) { if (btn) btn.disabled = true; return p.then(function (v) { if (btn) btn.disabled = false; return v; }, function (e) { if (btn) btn.disabled = false; throw e; }); }
 
@@ -56,7 +65,7 @@
     sheetsEl.appendChild(el); stack.push({ el: el, onClose: onClose });
     return el.querySelector('.body');
   }
-  function closeSheet(skipHook) { var s = stack.pop(); if (!s) return; s.el.remove(); if (s.onClose && !skipHook) s.onClose(); }
+  function closeSheet(skipHook) { var s = stack.pop(); if (!s) return; s.el.remove(); if (s.onClose && !skipHook) s.onClose(); if (!stack.length && S.dirty && S.me) { S.dirty = false; VIEWS[S.tab](); } }
   function closeAllSheets() { while (stack.length) closeSheet(true); SP = null; }
   function topBody() { return stack.length ? stack[stack.length - 1].el.querySelector('.body') : null; }
 
@@ -81,9 +90,18 @@
   }
   function boot() {
     if (!S.token) return renderLogin();
-    app.innerHTML = '<div class="empty">載入中…</div>';
-    api('me').then(function (d) { S.me = d.me; S.today = d.today; if (S.me.mustChange) return renderMustChange(); start(); })
-      .catch(function (e) { if (e.code !== 'auth' && e.code !== 'must_change') renderLogin(e.message); });
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(MEKEY) || 'null'); } catch (e) { saved = null; }
+    var started = false;
+    if (saved && saved.account && !saved.mustChange) { S.me = saved; S.today = nowTaipei(); started = true; start(); }
+    else app.innerHTML = '<div class="empty">載入中…</div>';
+    api('me').then(function (d) {
+      var changed = !S.me || S.me.role !== d.me.role || S.me.dept !== d.me.dept || S.me.name !== d.me.name;
+      S.me = d.me; S.today = d.today;
+      try { localStorage.setItem(MEKEY, JSON.stringify(d.me)); } catch (e) { /* 忽略 */ }
+      if (S.me.mustChange) return renderMustChange();
+      if (!started || changed) start();
+    }).catch(function (e) { if (e.code !== 'auth' && e.code !== 'must_change' && !started) renderLogin(e.message); });
   }
   function tabsFor() {
     if (S.me.role === 'director') return [['brief', '晨報'], ['home', '督導'], ['sched', '行程'], ['journal', '週誌'], ['todos', '待辦']];
@@ -134,10 +152,11 @@
     view().innerHTML = h;
   }
   function loadHome() {
-    loading();
-    var p = Promise.resolve();
-    if (S.me.role === 'director' && !S.data.sups) p = api('brief').then(function (b) { S.data.sups = b.supervisors; if (!S.as && b.supervisors.length) S.as = b.supervisors[0].account; });
-    p.then(function () { return api('home', S.me.role === 'director' ? { as: S.as } : {}); }).then(function (d) { S.home = d; renderHome(); }).catch(failView);
+    if (S.me.role === 'director' && !S.as) {            // 還不知道有哪些督導：先問一次
+      loading();
+      return api('brief').then(function (b) { C['brief|{}'] = b; S.data.sups = b.supervisors; if (b.supervisors.length) { S.as = b.supervisors[0].account; loadHome(); } else view().innerHTML = '<div class="empty">還沒有督導帳號</div>'; }).catch(failView);
+    }
+    swr('home', S.me.role === 'director' ? { as: S.as } : {}, function (d) { S.home = d; renderHome(); });
   }
 
   /* ---------- 門市頁 ---------- */
@@ -308,8 +327,7 @@
 
   /* ---------- 待辦清單 ---------- */
   function loadTodos() {
-    loading();
-    api('todo.list').then(function (d) {
+    swr('todo.list', {}, function (d) {
       S.data.todos = d.todos;
       var late = d.todos.filter(function (t) { return t.late; }).length;
       view().innerHTML = '<div class="sec"><h2>' + (S.me.role === 'dept' ? esc(S.me.dept) + '的待辦' : '未結案待辦') + '（' + d.todos.length + '）</h2>' + (late ? '<span class="chip bad right">逾期 ' + late + '</span>' : '') + '</div>' +
@@ -323,9 +341,8 @@
 
   /* ---------- 行程 ---------- */
   function loadSched() {
-    loading();
     var from = S.sched.from, to = addDays(from, 6);
-    api('events.list', { from: from, to: to }).then(function (d) {
+    swr('events.list', { from: from, to: to }, function (d) {
       S.data.people = d.people; S.data.types = d.types; S.data.events = d.events;
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
       var h = '<div class="row"><button class="btn sm" data-act="wk" data-n="-7" aria-label="上一週">←</button><b class="num">' + esc(md(from)) + ' – ' + esc(md(to)) + '</b><button class="btn sm" data-act="wk" data-n="7" aria-label="下一週">→</button>' +
@@ -380,13 +397,13 @@
   }
   function autoBlock(d) { return '<div class="sec"><h2>系統自動帶入</h2></div><div class="card small">' + d.auto.lines.map(function (l) { return '<div>・' + esc(l) + '</div>'; }).join('') + '</div>'; }
   function loadJournal() {
-    loading();
-    if (S.me.role === 'director') return api('journal.board', { week: S.jweek }).then(function (d) {
+    if (S.me.role === 'director') return swr('journal.board', { week: S.jweek }, function (d) {
       view().innerHTML = weekNav() + '<div class="sec"><h2>督導週誌（' + esc(md(d.due)) + ' 前交）</h2></div>' + d.rows.map(function (r) {
         return '<button class="card" data-act="j-open" data-who="' + esc(r.account) + '"><div class="row"><span class="title">' + esc(r.name) + '</span><span class="chip ' + (r.state === '已送出' ? (r.read ? 'good' : 'warn') : '') + '">' + esc(r.state === '已送出' ? (r.read ? '已讀' : '待閱') : r.state) + '</span></div>' +
           '<div class="small muted num">現場 ' + r.site + '・遠端 ' + r.remote + '・抽查 ' + r.camDone + '/' + r.stores + (r.late ? '・<span class="down">逾期 ' + r.late + '</span>' : '') + '</div>' + (r.needs ? '<div class="small pre">需要協助：' + esc(r.needs) + '</div>' : '') + '</button>';
       }).join('');
     }).catch(failView);
+    loading();
     api('journal.get', { week: S.jweek }).then(function (d) {
       S.data.journal = d;
       var s = d.saved, v = s || d.draft, sent = s && s.state === '已送出';
@@ -414,8 +431,7 @@
 
   /* ---------- 總監晨報 ---------- */
   function loadBrief() {
-    loading();
-    api('brief').then(function (d) {
+    swr('brief', {}, function (d) {
       S.data.sups = d.supervisors; if (!S.as && d.supervisors.length) S.as = d.supervisors[0].account;
       var k = d.kpi, h = '<div class="sec"><h2>晨報 ' + esc(mdw(d.today)) + '</h2><span class="small muted right">營收' + (d.asOf ? '到 ' + esc(md(d.asOf)) : '：' + esc(d.metricsNote)) + '</span></div>' +
         '<div class="kpis"><div class="kpi"><div class="k">昨日營收</div><div class="v num">' + money(k.y) + '</div><div class="s">' + pct(k.ch) + (k.ach !== null ? '・目標 ' + k.ach + '%' : '') + '</div></div>' +
