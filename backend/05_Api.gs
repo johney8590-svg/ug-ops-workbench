@@ -389,7 +389,7 @@ function eventsList_(me, d) {
   const who = str_(d.who, 60);
   const list = Store.rows('events').filter(function (e) { return ok[e.who] && (!who || e.who === who) && e.start <= to && e.end >= from; }).map(eventView_)
     .sort(function (a, b) { return a.start.localeCompare(b.start) || a.name.localeCompare(b.name); });
-  return { today: today, from: from, to: to, events: list, people: people.map(function (p) { return { account: p.account, name: p.name, dept: p.dept, role: p.role }; }), types: EVENT_TYPES };
+  return { today: today, from: from, to: to, events: list, days: calendarDays_(from, to), people: people.map(function (p) { return { account: p.account, name: p.name, dept: p.dept, role: p.role }; }), types: EVENT_TYPES };
 }
 function eventFields_(d) {
   if (EVENT_TYPES.indexOf(d.type) < 0) fail_('請選擇行程類型');

@@ -66,7 +66,7 @@ function load(opts) {
   };
   const dir = path.join(__dirname, '..', 'backend');
   const src = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).sort().map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n') +
-    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_, syncQsc_ };';
+    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_, syncQsc_, seedCalendar };';
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: 'backend.gs' });
   return { gas: sandbox.__gas, books, props, cache, files, mails, folders };

@@ -113,6 +113,9 @@ r = call('events.delete', { id: other.id }, jill); ok(!r.ok && r.code === 'forbi
 r = call('events.update', { id: mine.id, type: '外出', place: '總部開會', start: '2026-11-28' }, jill); ok(r.ok, '修改自己的行程', r);
 r = call('events.delete', { id: mine.id }, jill); ok(r.ok, '刪除自己的行程', r);
 
+r = call('events.list', { from: '2027-02-01', to: '2027-02-28' }, jill);
+ok(r.ok && r.data.days.filter(x => x.kind !== '節日').length === 8 && r.data.days.some(x => x.date === '2027-02-06' && x.name === '春節初一') && !r.data.days.some(x => x.kind === '補班'), '月行事曆：2027 春節假期（2/4–2/10、2/28）且沒有補班日', r.data && r.data.days);
+ok(env.gas.seedCalendar() === 0, '月行事曆：重複填寫不會產生重複的日子');
 // --- 行事曆訂閱 ---
 r = call('cal.url', {}, jill); const url = r.data.url; ok(r.ok && /\?cal=[0-9a-f]{64}$/.test(url), '取得訂閱網址');
 ok(call('cal.url', {}, jill).data.url === url, '訂閱網址固定不變');

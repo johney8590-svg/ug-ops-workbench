@@ -7,7 +7,7 @@
   var KEY = 'ug-ops-token', MEKEY = 'ug-ops-me';
   var C = {};                          // 上次拿到的畫面資料：切換分頁時先顯示，再背景更新
   var WD = ['日', '一', '二', '三', '四', '五', '六'];
-  var S = { token: null, me: null, today: '', tab: '', as: '', home: null, sched: { from: '', scope: 'mine' }, jweek: '', data: {} };
+  var S = { token: null, me: null, today: '', tab: '', as: '', home: null, sched: { from: '', scope: 'mine', mode: 'week', month: '' }, jweek: '', data: {} };
   var SP = null;                       // 目前開著的門市頁狀態
   var app = document.getElementById('app'), sheetsEl = document.getElementById('sheets'), toastEl = document.getElementById('toast');
   try { S.token = localStorage.getItem(KEY); } catch (e) { /* 無痕模式可能讀不到，改成每次都要登入 */ }
@@ -109,7 +109,7 @@
     return [['todos', '待辦'], ['sched', '行程'], ['posts', '公告']];
   }
   function start() {
-    S.sched.from = monday(S.today); S.jweek = monday(S.today);
+    S.sched.from = monday(S.today); S.sched.month = S.today.slice(0, 7); S.jweek = monday(S.today);
     var tabs = tabsFor();
     app.innerHTML = '<header class="top"><div class="wrap top-row"><div class="mark">UG</div><h1>營運工作台</h1><button class="who" data-act="account">' + esc(S.me.name) + '</button></div></header>' +
       '<main class="wrap" id="view"></main><nav class="tabs" aria-label="主選單"><div class="wrap">' +
@@ -351,29 +351,64 @@
   }
 
   /* ---------- 行程 ---------- */
+  function dayMarks(days, day) {
+    return days.filter(function (x) { return x.date === day; }).map(function (x) { return '<span class="hol ' + (x.kind === '節日' ? 'fest' : x.kind === '補班' ? 'work' : 'off') + '">' + esc(x.name) + '</span>'; }).join('');
+  }
+  function schedHead() {
+    return seg('smode', [['week', '週'], ['month', '月']], S.sched.mode) + seg('scope', [['mine', '我的行程'], ['all', S.me.role === 'director' ? '全部同仁' : '同組同仁']], S.sched.scope);
+  }
+  function schedFoot() { return '<div class="btns"><button class="btn primary grow" data-act="ev-new">＋ 新增行程</button><button class="btn grow" data-act="cal">加到手機行事曆</button></div>'; }
+  function monthAdd(ym, n) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + ('0' + (m + 1)).slice(-2); }
+  function loadMonth() {
+    var ym = S.sched.month, first = ym + '-01', last = addDays(monthAdd(ym, 1) + '-01', -1), from = monday(first), to = addDays(monday(last), 6);
+    swr('events.list', { from: from, to: to }, function (d) {
+      S.data.people = d.people; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days;
+      var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
+      var h = '<div class="row"><button class="btn sm" data-act="mo" data-n="-1" aria-label="上個月">←</button><b class="num">' + (+ym.slice(0, 4)) + ' 年 ' + (+ym.slice(5, 7)) + ' 月</b><button class="btn sm" data-act="mo" data-n="1" aria-label="下個月">→</button>' +
+        (ym !== S.today.slice(0, 7) ? '<button class="btn sm" data-act="mo" data-n="0">回本月</button>' : '') + '</div>' + schedHead() +
+        '<div class="cal"><div class="cal-h">' + [1, 2, 3, 4, 5, 6, 0].map(function (w) { return '<span>' + WD[w] + '</span>'; }).join('') + '</div><div class="cal-g">';
+      for (var day = from; day <= to; day = addDays(day, 1)) {
+        var list = evs.filter(function (e) { return e.start <= day && e.end >= day; }), marks = d.days.filter(function (x) { return x.date === day; });
+        var off = marks.some(function (x) { return x.kind === '假日' || x.kind === '補假'; }) || ((dow(day) === 0 || dow(day) === 6) && !marks.some(function (x) { return x.kind === '補班'; }));
+        h += '<button class="cal-c' + (day.slice(0, 7) !== ym ? ' out' : '') + (day === S.today ? ' today' : '') + (off ? ' off' : '') + '" data-act="cal-day" data-day="' + day + '" aria-label="' + esc(mdw(day)) + '"><span class="n num">' + (+day.slice(8, 10)) + '</span>' +
+          (marks.length ? '<span class="h ' + (marks[0].kind === '節日' ? 'fest' : marks[0].kind === '補班' ? 'work' : '') + '">' + esc(marks[0].name.split('・')[0].slice(0, 5)) + '</span>' : '') +
+          list.slice(0, 2).map(function (e) { return '<span class="e">' + esc((S.sched.scope === 'all' ? e.name.slice(0, 3) + ' ' : '') + e.type) + '</span>'; }).join('') + (list.length > 2 ? '<span class="e more">+' + (list.length - 2) + '</span>' : '') + '</button>';
+      }
+      h += '</div></div><div class="small muted">紅字是放假日，橘字是會影響業績的節日。點日期可以看當天行程或新增。</div>' + schedFoot();
+      view().innerHTML = h;
+    }).catch(failView);
+  }
+  function openDay(day) {
+    var d = S.data, evs = (d.events || []).filter(function (e) { return (S.sched.scope === 'all' || e.who === S.me.account) && e.start <= day && e.end >= day; });
+    openSheet(mdw(day), '<div>' + dayMarks(d.days || [], day) + '</div><div class="card">' + (evs.length ? evs.map(function (e) {
+      var can = S.me.role === 'director' || e.who === S.me.account, txt = (S.sched.scope === 'all' ? esc(e.name) + '｜' : '') + esc(e.type) + '・' + esc(e.place);
+      return '<div class="item">' + (can ? '<button class="ev" data-act="ev-edit" data-id="' + esc(e.id) + '">' + txt + '</button>' : '<span class="ev">' + txt + '</span>') + '</div>';
+    }).join('') : '<div class="empty">這天沒有行程</div>') + '</div><div class="btns"><button class="btn primary block" data-act="ev-new" data-day="' + day + '">＋ 在這天新增行程</button></div>');
+  }
   function loadSched() {
+    if (S.sched.mode === 'month') return loadMonth();
     var from = S.sched.from, to = addDays(from, 6);
     swr('events.list', { from: from, to: to }, function (d) {
-      S.data.people = d.people; S.data.types = d.types; S.data.events = d.events;
+      S.data.people = d.people; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days || [];
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
       var h = '<div class="row"><button class="btn sm" data-act="wk" data-n="-7" aria-label="上一週">←</button><b class="num">' + esc(md(from)) + ' – ' + esc(md(to)) + '</b><button class="btn sm" data-act="wk" data-n="7" aria-label="下一週">→</button>' +
         (from !== monday(S.today) ? '<button class="btn sm" data-act="wk" data-n="0">回本週</button>' : '') + '</div>' +
-        seg('scope', [['mine', '我的行程'], ['all', S.me.role === 'director' ? '全部同仁' : '同組同仁']], S.sched.scope) + '<div class="card">';
+        schedHead() + '<div class="card">';
       for (var i = 0; i < 7; i++) {
         var day = addDays(from, i), list = evs.filter(function (e) { return e.start <= day && e.end >= day; });
-        h += '<div class="day' + (day === S.today ? ' today' : '') + '"><div class="d num">' + esc(md(day)) + ' ' + WD[dow(day)] + '</div><div class="evs">' +
+        h += '<div class="day' + (day === S.today ? ' today' : '') + '"><div class="d num">' + esc(md(day)) + ' ' + WD[dow(day)] + '</div><div class="evs">' + dayMarks(S.data.days, day) +
           (list.length ? list.map(function (e) {
             var can = S.me.role === 'director' || e.who === S.me.account, txt = (S.sched.scope === 'all' ? esc(e.name) + '｜' : '') + esc(e.type) + '・' + esc(e.place);
             return can ? '<button class="ev" data-act="ev-edit" data-id="' + esc(e.id) + '">' + txt + '</button>' : '<span class="ev">' + txt + '</span>';
           }).join('') : '<span class="ev muted">' + (S.sched.scope === 'mine' ? '內勤' : '—') + '</span>') + '</div></div>';
       }
-      h += '</div><div class="btns"><button class="btn primary grow" data-act="ev-new">＋ 新增行程</button><button class="btn grow" data-act="cal">加到手機行事曆</button></div>';
+      h += '</div>' + schedFoot();
       view().innerHTML = h;
     }).catch(failView);
   }
-  function eventForm(e) {
+  function eventForm(e, day) {
     var isNew = !e, dir = S.me.role === 'director';
-    e = e || { type: S.me.role === 'supervisor' ? '巡店' : '外出', place: '', start: S.today > S.sched.from ? S.today : S.sched.from, end: '' };
+    e = e || { type: S.me.role === 'supervisor' ? '巡店' : '外出', place: '', start: day || (S.today > S.sched.from ? S.today : S.sched.from), end: '' };
     var stores = S.home ? S.home.cards.map(function (c) { return c.store; }) : [];
     var h = '<label class="f">類型<select id="ev-type">' + S.data.types.map(function (t) { return '<option' + (t === e.type ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select></label>' +
       '<label class="f">地點或說明<input type="text" id="ev-place" maxlength="100" list="ev-stores" value="' + esc(e.place) + '" placeholder="例：台北信義店"></label><datalist id="ev-stores">' + stores.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
@@ -513,6 +548,7 @@
     seg: function (b) {
       var n = b.dataset.name, v = b.dataset.v;
       if (n === 'scope') { S.sched.scope = v; return loadSched(); }
+      if (n === 'smode') { S.sched.mode = v; if (v === 'month') S.sched.month = S.sched.from.slice(0, 7); else if (S.sched.month !== S.sched.from.slice(0, 7)) S.sched.from = S.sched.month === S.today.slice(0, 7) ? monday(S.today) : monday(S.sched.month + '-01'); return loadSched(); }
       if (n === 'pcat') { S.pcat = v; return loadPosts(); }
       if (!SP) return;
       SP[n] = v; refreshForm();
@@ -588,12 +624,14 @@
     },
     'x-resolve-send': function (b) { busy(b, api('ext.resolve', { noteId: b.dataset.note, reply: topBody().querySelector('#xr-text').value.trim() })).then(function () { closeSheet(); toast('已回覆'); afterTodo(); }).catch(oops); },
     wk: function (b) { var n = +b.dataset.n; S.sched.from = n ? addDays(S.sched.from, n) : monday(S.today); loadSched(); },
-    'ev-new': function () { eventForm(null); },
+    'ev-new': function (b) { var day = b.dataset.day || ''; if (day) closeSheet(true); eventForm(null, day); },
+    mo: function (b) { var n = +b.dataset.n; S.sched.month = n ? monthAdd(S.sched.month, n) : S.today.slice(0, 7); loadSched(); },
+    'cal-day': function (b) { openDay(b.dataset.day); },
     'ev-edit': function (b) { var e = (S.data.events || []).filter(function (x) { return x.id === b.dataset.id; })[0]; if (e) eventForm(e); },
     'ev-add': function (b) {
       var f = eventFields(); if (!f.place) return toast('請填寫地點或說明'); if (!f.start) return toast('請選擇日期');
       f.weekdays = vals('ev-wd').map(Number); if (S.me.role === 'director') { f.whos = vals('ev-who'); if (!f.whos.length) return toast('請至少選一位'); }
-      busy(b, api('events.add', f)).then(function (r) { closeSheet(); toast('已新增 ' + r.added + ' 筆行程'); S.sched.from = monday(f.start); loadSched(); }).catch(oops);
+      busy(b, api('events.add', f)).then(function (r) { closeSheet(); toast('已新增 ' + r.added + ' 筆行程'); S.sched.from = monday(f.start); S.sched.month = f.start.slice(0, 7); loadSched(); }).catch(oops);
     },
     'ev-save': function (b) { var f = eventFields(); f.id = b.dataset.id; busy(b, api('events.update', f)).then(function () { closeSheet(); toast('已儲存'); loadSched(); }).catch(oops); },
     'ev-del': function (b) {

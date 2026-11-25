@@ -30,6 +30,7 @@ function seed(env, opts) {
     }
   });
   gas.setup();
+  gas.seedCalendar();
   gas.Store.reset();
   STORES.forEach(([s, z, sup]) => gas.Store.append('stores', { store: s, zone: z, supervisor: sup, type: '加盟', active: 'Y' }));
   gas.Store.append('specials', { store: '台北信義店', date: '2026-10-10', amount: '15000', note: '國慶活動' });
