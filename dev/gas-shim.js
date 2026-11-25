@@ -47,6 +47,7 @@ function load(opts) {
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
       computeDigest(alg, s) { return Array.from(crypto.createHash('sha256').update(String(s), 'utf8').digest()).map(b => (b > 127 ? b - 256 : b)); },
       getUuid: () => crypto.randomUUID(),
+      parseCsv: s => String(s).trim().split(/\r?\n/).map(l => l.split(',')),
       formatDate(d, tz, fmt) {
         const t = new Date(d.getTime() + 8 * 3600e3);   // Asia/Taipei 固定 UTC+8
         return fmt.replace('yyyy', t.getUTCFullYear()).replace('MM', pad(t.getUTCMonth() + 1)).replace('dd', pad(t.getUTCDate()))
@@ -56,7 +57,7 @@ function load(opts) {
       newBlob: (bytes, type, name) => ({ bytes, type, name })
     },
     DriveApp: {
-      getFolderById(id) { if (folders[id]) { const iter = a => { let i = 0; return { hasNext: () => i < a.length, next: () => a[i++] }; }; return { getFiles: () => iter(folders[id].map(f => ({ getId: () => f.id, getName: () => f.name, getUrl: () => 'https://drive.google.com/file/d/' + f.id, getLastUpdated: () => new Date(f.updated) }))), getFolders: () => iter([]) }; }
+      getFolderById(id) { if (folders[id]) { const iter = a => { let i = 0; return { hasNext: () => i < a.length, next: () => a[i++] }; }; return { getFiles: () => iter(folders[id].map(f => ({ getId: () => f.id, getName: () => f.name, getUrl: () => 'https://drive.google.com/file/d/' + f.id, getLastUpdated: () => new Date(f.updated), getMimeType: () => f.mime || 'text/csv', getBlob: () => ({ getDataAsString: () => f.csv || '' }) }))), getFolders: () => iter([]) }; }
         if (id !== props.PHOTO_FOLDER_ID) throw new Error('no folder'); return { createFile(blob) { const fid = 'F' + crypto.randomUUID(); files[fid] = blob; return { getId: () => fid }; } }; },
       getFileById(id) { const b = files[id]; if (!b) throw new Error('no file'); return { getBlob: () => ({ getContentType: () => b.type, getBytes: () => b.bytes }) }; }
     },
@@ -65,7 +66,7 @@ function load(opts) {
   };
   const dir = path.join(__dirname, '..', 'backend');
   const src = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).sort().map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n') +
-    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_ };';
+    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_, syncQsc_ };';
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: 'backend.gs' });
   return { gas: sandbox.__gas, books, props, cache, files, mails, folders };

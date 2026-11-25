@@ -13,7 +13,7 @@ const TABS = {
   journals: ['id', 'week', 'who', 'state', 'found', 'issue', 'plan', 'needs', 'sentAt', 'readAt', 'reply'],
   qsc:      ['store', 'date', 'score', 'by', 'fails'],
   specials: ['store', 'date', 'amount', 'note'],
-  extnotes: ['id', 'caseId', 'store', 'at', 'by', 'text', 'help', 'doneAt', 'doneBy', 'reply'],
+  extnotes: ['id', 'caseId', 'store', 'at', 'by', 'text', 'help', 'doneAt', 'doneBy', 'reply', 'photoId'],
   posts:    ['id', 'cat', 'title', 'body', 'fileId', 'fileName', 'fileUrl', 'fileUpdated', 'state', 'createdAt', 'createdBy', 'approvedAt', 'approvedBy'],
   postacks: ['postId', 'account', 'at'],
   sessions: ['tokenHash', 'account', 'expires'],

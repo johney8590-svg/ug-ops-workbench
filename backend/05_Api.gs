@@ -20,7 +20,7 @@ function isAnomNew_(t, today) { return isAnom_(t) && String(t.createdAt).slice(0
 /** 督導或處理單位寫給總監的補充說明（存在工作台，不寫回原系統）。 */
 function caseNotes_(caseId) {
   return Store.rows('extnotes').filter(function (n) { return n.caseId === caseId; }).map(function (n) {
-    return { noteId: n.id, at: n.at, by: nameOf_(n.by), text: n.text, help: yes_(n.help), done: !!n.doneAt, reply: n.reply || '' };
+    return { noteId: n.id, at: n.at, by: nameOf_(n.by), text: n.text, help: yes_(n.help), done: !!n.doneAt, reply: n.reply || '', photo: !!n.photoId };
   });
 }
 function nameOf_(account) { const p = person_(account); return p ? p.name : account; }
@@ -34,7 +34,8 @@ function todoView_(t, today) {
   const xn = yes_(t.ext) ? caseNotes_(t.id) : null;
   return { id: t.id, store: t.store, source: t.source, dept: t.dept, text: t.text, status: t.status, by: yes_(t.ext) ? '門市' : nameOf_(t.by),
     createdAt: String(t.createdAt).slice(0, 10), days: todoDays_(t, today), late: todoLate_(t, today),
-    notes: xn || J_(t.notes, []), help: !!xn && xn.some(function (n) { return n.help && !n.done; }), nudgedToday: t.nudgedAt === today, hasPhoto: !!t.photoId,
+    notes: xn || J_(t.notes, []), help: !!xn && xn.some(function (n) { return n.help && !n.done; }), nudgedToday: t.nudgedAt === today,
+    hasPhoto: !!t.photoId || (!!xn && xn.some(function (n) { return n.photo; })),
     ext: yes_(t.ext), sys: yes_(t.ext) ? EXT_SYSTEMS[t.source].sys : '', url: yes_(t.ext) ? extUrl_(t) : '' };
 }
 function camSlots_(store, wk, visits) {
@@ -142,7 +143,7 @@ function visitAdd_(me, d) {
   const talk = str_(d.talk, 1000), fb = str_(d.fb, 1000), note = str_(d.note, 300);
   const idList = function (a, prefixTab) {
     if (!Array.isArray(a)) return [];
-    const ids = Store.rows(prefixTab).map(function (t) { return t.id; });
+    const ids = allTodos_().map(function (t) { return t.id; });
     return a.map(String).filter(function (x, i, arr) { return ids.indexOf(x) >= 0 && arr.indexOf(x) === i; }).slice(0, 30);
   };
   const nudges = idList(d.nudges, 'todos'), todos = idList(d.todos, 'todos');
@@ -203,6 +204,17 @@ function todoAdd_(me, d) {
   const today = today_();
   const dupes = allTodos_().filter(function (t) { return t.store === store && t.source === source && isOpenTodo_(t) && todoDays_(t, today) <= DEDUPE_DAYS; });
   if (dupes.length && !d.force) return { dupes: dupes.map(function (t) { return todoView_(t, today); }), source: source, dept: SOURCES[source].dept };
+  if (writeBackOn_(source)) {                         // 直接開在原系統，工作台不另外留一份
+    let xid = '';
+    withLock_(function () { xid = writeBack_(me, source, store, text); });
+    const pid = savePhoto_(d.photo, xid + '.jpg');
+    if (pid) withLock_(function () { Store.append('extnotes', { id: uid_('N'), caseId: xid, store: store, at: nowStamp_(), by: me.account, text: '回報時拍的現場照片', help: false, doneAt: '', doneBy: '', reply: '', photoId: pid }); });
+    audit_(me.account, 'todo.writeback', xid + ' ' + store + ' ' + source);
+    const made = allTodos_().filter(function (t) { return yes_(t.ext) && t.id === xid; })[0];
+    if (!made) fail_('已送出，但暫時讀不回這筆案件，請稍後重新整理');
+    notify_(made.dept, store + ' 新回報：' + text, me.name + ' 從營運工作台回報，已開在' + EXT_SYSTEMS[source].sys + '。\n單號：' + xid);
+    return { todo: todoView_(made, today), wroteTo: EXT_SYSTEMS[source].sys };
+  }
   const prefix = { '修繕': 'RP', '物料異常': 'MA', '文宣': 'PR', '其他': 'TD' }[source];
   const id = uid_(prefix);
   const photoId = savePhoto_(d.photo, id + '.jpg');
@@ -249,6 +261,12 @@ function todoList_(me, d) {
     anom: anom.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return a.days - b.days; }).slice(0, 150), anomTotal: anom.length };
 }
 function photoGet_(me, d) {
+  const xn = Store.rows('extnotes').filter(function (n) { return n.caseId === str_(d.id, 60) && n.photoId; })[0];
+  if (xn) {
+    extCase_(me, xn.caseId);                            // 權限同案件
+    const b = DriveApp.getFileById(xn.photoId).getBlob();
+    return { type: b.getContentType(), data: Utilities.base64Encode(b.getBytes()) };
+  }
   const t = findTodo_(str_(d.id, 40));
   if (!canSeeTodo_(me, t)) fail_('你沒有這筆待辦的權限', 'forbidden');
   if (!t.photoId) fail_('這筆待辦沒有照片');
@@ -293,7 +311,7 @@ function jDraft_(who, wk, c) {
     const parts = [trim(v.talk), ng.length ? '異常：' + ng.join('、') + (v.note ? '（' + trim(v.note) + '）' : '') : '', v.fb ? '店家反饋：' + trim(v.fb) : ''].filter(String);
     return md_(v.date) + ' ' + v.store + '（' + v.mode + (v.mode === '遠端' ? '・' + v.kind : '') + (v.slot ? '・' + v.slot + (yes_(v.pass) ? '通過' : '未計入') : '') + '）：' + (parts.join('；') || '無異常');
   });
-  const byId = {}; c.todos.forEach(function (t) { byId[t.id] = t; });
+  const byId = {}; c.todos.concat(c.anom).forEach(function (t) { byId[t.id] = t; });
   const issue = [], seen = {};
   vs.forEach(function (v) {
     J_(v.todos, []).forEach(function (id) { const t = byId[id]; if (t && !seen['n' + id]) { seen['n' + id] = 1; issue.push('回報' + t.source + '（' + t.dept + '）：' + t.store + ' ' + t.text); } });

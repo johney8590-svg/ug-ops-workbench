@@ -246,6 +246,56 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c6('todo.list', {}, tk('robert')); ok(/case=R1$/.test(r.data.todos[0].url), '管理網址：總監拿到');
 }
 
+// --- 回報寫回原系統（自動編號）---
+{
+  const e7 = seed(load({ props: { REPAIR_SHEET_ID: 'REPAIR', ANOMALY_SHEET_ID: 'ANOMALY', WRITEBACK: 'on', PHOTO_FOLDER_ID: 'PHOTOS' } }), { sample: false });
+  const rp = e7.books.REPAIR.insertSheet('repairs');
+  rp.appendRow(['id', 'createdAt', 'store', 'supervisor', 'occurDate', 'equipment', 'description', 'status', 'handleUnit', 'progressNote', 'repairConfirm', 'closeDate', 'supervisorConfirm', 'robertNote', 'statusHistory', 'updatedAt', 'zone', 'equipNo', 'contact', 'phone']);
+  const an = e7.books.ANOMALY.insertSheet('cases');
+  an.appendRow(['caseNo', 'date', 'store', 'name', 'mat', 'mfg', 'exp', 'qty', 'cls', 'desc', 'mediaUrls', 'handle', 'method', 'result', 'status', 'createdAt', 'supp', 'history']);
+  an.appendRow(['台北信義店20261124001', '2026-11-24', '台北信義店', '小明', '鮮乳', '', '', '1', '少送', 'x', '[]', '', '', '', 'done', '2026-11-24T01:00:00.000Z', '', '']);
+  const c7 = (action, data, token) => JSON.parse(e7.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tk = a => c7('login', { account: a, password: 'ugdemo1234' }).data.token;
+  const tj = tk('jill'), tg = tk('gongwu');
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  r = c7('todo.add', { store: '台北信義店', text: '=冷氣漏水', photo: { type: 'image/png', data: png } }, tj);
+  const row = rp._rows[1] || [];
+  ok(r.ok && /^R\d{8}-\d{4}$/.test(r.data.todo.id) && r.data.wroteTo === '修繕系統' && r.data.todo.ext, '寫回：修繕單開在修繕系統，案號自動產生', r);
+  ok(row[0] === r.data.todo.id && row[2] === '台北信義店' && row[5] === '其他' && row[6] === '=冷氣漏水' && row[7] === '待處理' && row[8] === '工務' && /營運工作台回報/.test(row[14]) && row.length === 20, '寫回：欄位照修繕系統的格式', row);
+  ok(e7.gas.Store.rows('todos').length === 0, '寫回：工作台不另外留一份');
+  ok(r.data.todo.hasPhoto, '寫回：照片留在工作台，案件上看得到');
+  const rid = r.data.todo.id;
+  r = c7('photo.get', { id: rid }, tj); ok(r.ok && r.data.data === png, '寫回：督導可看照片', r);
+  r = c7('photo.get', { id: rid }, tg); ok(r.ok, '寫回：處理單位可看照片');
+  r = c7('photo.get', { id: rid }, tk('joyce')); ok(!r.ok && r.code === 'forbidden', '寫回：別的督導不能看照片');
+  r = c7('store', { store: '台北信義店' }, tj); ok(r.data.todos.some(t => t.id === rid), '寫回：立刻出現在門市頁');
+  r = c7('visit.add', { store: '台北信義店', mode: '現場', talk: 'x', todos: [rid] }, tj); ok(r.ok, '寫回：可記入訪店紀錄');
+  r = c7('journal.get', {}, tj); ok(/回報修繕（工務）：台北信義店 其他：=冷氣漏水/.test(r.data.draft.issue), '寫回：進週誌草稿', r.data.draft.issue);
+  r = c7('todo.add', { store: '台北信義店', text: '鮮乳少送兩箱' }, tj);
+  ok(r.ok && r.data.todo.id === '台北信義店20261124002' && an._rows[2][14] === 'pend' && an._rows[2][9] === '鮮乳少送兩箱', '寫回：物料異常案號接續原系統當天序號', r.data && r.data.todo);
+  r = c7('todo.add', { store: '台北信義店', text: '海報沒到' }, tj); ok(r.ok && /^PR-/.test(r.data.todo.id) && !r.data.wroteTo, '寫回：文宣與其他仍留在工作台');
+}
+// --- QSC 資料夾同步 ---
+{
+  const e8 = seed(load({ props: { QSC_FOLDER_ID: 'QSC' } }), { sample: false });
+  e8.folders.QSC = [
+    { id: 'Q0', name: 'QSC 範本', updated: 1, csv: '門市,日期,分數\n台北信義店,2026/1/1,10' },
+    { id: 'Q1', name: '11月QSC.csv', updated: 1000, csv: '稽核報表,,,,\n門市,稽核日期,總分,稽核人,缺失項目\n台北信義,2026/11/20,88.5,王小美,冰箱溫度紀錄、茶湯濃度\n不存在店,2026/11/20,90,x,\n台北南京店,2026-11-21,95分,,' },
+    { id: 'Q2', name: '照片.xlsx', updated: 1000, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+  ];
+  let rep = e8.gas.syncQsc_();
+  ok(rep.files === 1 && rep.rows === 2 && rep.problems.length === 2, 'QSC：讀進兩筆，回報對不上的門市與不支援的檔案', rep);
+  e8.gas.Store.reset();
+  const c8 = (action, data, token) => JSON.parse(e8.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tj = c8('login', { account: 'jill', password: 'ugdemo1234' }).data.token;
+  r = c8('store', { store: '台北信義店' }, tj); ok(r.data.qsc.score === 88.5 && r.data.qsc.by === '王小美' && r.data.qsc.fails.length === 2, 'QSC：門市頁顯示（店名少一個店字也對得上）', r.data.qsc);
+  ok(e8.gas.syncQsc_().files === 0, 'QSC：沒更新的檔案不重讀');
+  e8.folders.QSC[1].updated = 2000; e8.folders.QSC[1].csv = '門市,日期,分數\n台北信義店,2026/11/20,91';
+  e8.gas.syncQsc_(); e8.gas.Store.reset();
+  const q20 = e8.gas.Store.rows('qsc').filter(q => q.store === '台北信義店' && q.date === '2026-11-20');
+  ok(q20.length === 1 && q20[0].score === '91', 'QSC：同店同日重傳以最後一次為準', q20);
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

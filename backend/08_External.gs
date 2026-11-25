@@ -102,3 +102,40 @@ function putExternal_(list) {
 }
 /** 工作台自己的待辦＋既有系統的未結案案件。 */
 function allTodos_() { return Store.rows('todos').concat(externalTodos_()); }
+
+/**
+ * 督導在工作台回報的修繕／物料異常，直接寫進原系統的後台（指令碼屬性 WRITEBACK=on 才會啟用）。
+ * 案號照原系統的規則自動產生。注意：這樣寫入不會觸發原系統自己的 LINE／Email 通知，照片也不會帶過去
+ * （照片留在工作台，案件上看得到）。
+ */
+function writeBackOn_(source) {
+  return prop_('WRITEBACK') === 'on' && ((source === '修繕' && prop_('REPAIR_SHEET_ID')) || (source === '物料異常' && prop_('ANOMALY_SHEET_ID')));
+}
+function appendByHeader_(sh, obj) {
+  const h = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim(); });
+  sh.appendRow(h.map(function (k) { const v = obj[k]; return v === undefined ? '' : (typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v); }));
+}
+function writeBack_(me, source, store, text) {
+  const s = activeStores_().filter(function (x) { return x.store === store; })[0] || {};
+  const now = new Date(), iso = now.toISOString(), day = today_();
+  let id = '';
+  if (source === '修繕') {
+    const sh = SpreadsheetApp.openById(prop_('REPAIR_SHEET_ID')).getSheetByName('repairs');
+    if (!sh) fail_('修繕系統後台找不到 repairs 分頁');
+    const used = {}; sh.getRange(1, 1, sh.getLastRow(), 1).getValues().forEach(function (r) { used[String(r[0])] = 1; });
+    do { id = 'R' + day.replace(/-/g, '') + '-' + Math.floor(Math.random() * 9000 + 1000); } while (used[id]);
+    appendByHeader_(sh, { id: id, createdAt: iso, store: store, supervisor: s.supName || me.name, occurDate: day, equipment: '其他', description: text, status: '待處理', handleUnit: '工務',
+      progressNote: '', repairConfirm: '', closeDate: '', supervisorConfirm: '', robertNote: '',
+      statusHistory: JSON.stringify([{ at: iso, by: '督導', from: '', to: '待處理', note: '營運工作台回報（' + me.name + '）' }]), updatedAt: iso, zone: '', equipNo: '', contact: me.name, phone: '' });
+  } else {
+    const sh = SpreadsheetApp.openById(prop_('ANOMALY_SHEET_ID')).getSheetByName('cases');
+    if (!sh) fail_('物料異常系統後台找不到 cases 分頁');
+    const prefix = store + day.replace(/-/g, '');
+    let seq = 0; sh.getRange(1, 1, sh.getLastRow(), 1).getValues().forEach(function (r) { if (String(r[0]).indexOf(prefix) === 0) seq++; });
+    id = prefix + ('00' + (seq + 1)).slice(-3);
+    appendByHeader_(sh, { caseNo: id, date: day, store: store, name: me.name + '（督導）', mat: '', mfg: '', exp: '', qty: '', cls: '督導回報', desc: text, mediaUrls: '[]',
+      handle: '', method: '', result: '', status: 'pend', createdAt: iso, supp: '', history: JSON.stringify([{ at: iso, act: '營運工作台回報', note: me.name }]) });
+  }
+  CacheService.getScriptCache().remove('ext:todos'); extMemo_ = null;
+  return id;
+}

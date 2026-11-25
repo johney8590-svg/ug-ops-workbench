@@ -23,7 +23,10 @@ function setup() {
     sh.getRange(1, 1, sh.getMaxRows(), Math.max(cols.length, sh.getMaxColumns())).setNumberFormat('@');
     const have = sh.getRange(1, 1, 1, cols.length).getValues()[0].map(String);
     if (have.join('') === '') sh.getRange(1, 1, 1, cols.length).setValues([cols]);
-    else cols.forEach(function (c, i) { if (have[i] !== c) throw new Error('分頁「' + tab + '」第 ' + (i + 1) + ' 欄應為 ' + c + '，目前是 ' + have[i] + '。請手動確認後再執行。'); });
+    else cols.forEach(function (c, i) {
+      if (have[i] === '') { sh.getRange(1, i + 1).setValue(c); return; }          // 新版多出來的欄位：補在最後面
+      if (have[i] !== c) throw new Error('分頁「' + tab + '」第 ' + (i + 1) + ' 欄應為 ' + c + '，目前是 ' + have[i] + '。請手動確認後再執行。');
+    });
     sh.setFrozenRows(1);
   });
   Store.reset();
@@ -141,6 +144,7 @@ function checkSetup() {
     ext.forEach(function (t) { n[t.source] = (n[t.source] || 0) + 1; if (!known[normStore_(t.store)]) miss[t.store] = 1; });
     console.log('既有系統未結案：' + JSON.stringify(n) + '；門市名稱對不上主檔的：' + (Object.keys(miss).join('、') || '無') + '；暫存大小 ' + JSON.stringify(ext).length);
   } catch (e) { console.log('既有系統讀取失敗：' + e.message); }
+  console.log('回報寫回原系統：' + (prop_('WRITEBACK') === 'on' ? '開啟' : '關閉') + '；公告資料夾：' + Object.keys(POST_CATS).filter(function (c) { return prop_(POST_CATS[c]); }).join('、') + '；QSC 最近一次同步：' + (prop_('QSC_LAST') || '尚無'));
   const people = Store.rows('people');
   console.log('帳號 ' + people.length + ' 個，其中已設定密碼 ' + people.filter(function (p) { return p.pwHash; }).length + ' 個');
 }

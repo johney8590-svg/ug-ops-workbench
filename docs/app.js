@@ -184,6 +184,7 @@
     if (t.ext) {                                      // 既有系統的單：這裡只看，處理要回原系統
       h += '<span class="chip">' + esc(t.sys) + '・' + esc(t.id) + '</span>';
       if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">開啟' + esc(t.sys) + '後台</a>';
+      if (t.hasPhoto) h += '<button class="btn sm" data-act="t-photo"' + id + '>看照片</button>';
       h += '<button class="btn sm" data-act="x-note"' + id + '>' + (S.me.role === 'director' ? '加註' : '補充說明給總監') + '</button>';
       var open = t.notes.filter(function (n) { return n.help && !n.done; }).slice(-1)[0];
       if (open && S.me.role === 'director') h += '<button class="btn sm primary" data-act="x-resolve" data-note="' + esc(open.noteId) + '">回覆並標為已協助</button>';
@@ -330,7 +331,7 @@
             '</div><div class="btns"><button class="btn block" data-act="report-force">不是同一件，另開新單</button></div>';
           return;
         }
-        sp.todos.push(r.todo.id); closeSheet(); toast('已回報給' + r.todo.dept); reloadStore();
+        sp.todos.push(r.todo.id); closeSheet(); toast(r.wroteTo ? '已開在' + r.wroteTo + '：' + r.todo.id : '已回報給' + r.todo.dept); reloadStore();
       }).catch(oops);
   }
 
