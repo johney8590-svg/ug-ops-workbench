@@ -362,6 +362,7 @@
   function loadMonth() {
     var ym = S.sched.month, first = ym + '-01', last = addDays(monthAdd(ym, 1) + '-01', -1), from = monday(first), to = addDays(monday(last), 6);
     swr('events.list', { from: from, to: to }, function (d) {
+      d.days = d.days || [];
       S.data.people = d.people; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days;
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
       var h = '<div class="row"><button class="btn sm" data-act="mo" data-n="-1" aria-label="上個月">←</button><b class="num">' + (+ym.slice(0, 4)) + ' 年 ' + (+ym.slice(5, 7)) + ' 月</b><button class="btn sm" data-act="mo" data-n="1" aria-label="下個月">→</button>' +
