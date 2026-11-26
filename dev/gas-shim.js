@@ -33,7 +33,7 @@ function load(opts) {
   opts = opts || {};
   const books = { DATA: makeBook(), DASH: makeBook(), MASTER: makeBook(), REPAIR: makeBook(), ANOMALY: makeBook(), PROMO: makeBook() };
   const props = Object.assign({ DATA_SHEET_ID: 'DATA', DASHBOARD_SHEET_ID: 'DASH' }, opts.props || {});
-  const cache = {}, files = {}, mails = [], folders = {};
+  const cache = {}, files = {}, mails = [], folders = {}, fetches = [];
   const pad = n => ('0' + n).slice(-2);
   const sandbox = {
     console,
@@ -62,6 +62,7 @@ function load(opts) {
       getFileById(id) { const b = files[id]; if (!b) throw new Error('no file'); return { getBlob: () => ({ getContentType: () => b.type, getBytes: () => b.bytes }) }; }
     },
     MailApp: { sendEmail(to, subject, body) { mails.push({ to, subject, body }); } },
+    UrlFetchApp: { fetch(url, opt) { fetches.push({ url, body: JSON.parse(opt.payload), auth: opt.headers.Authorization }); return { getResponseCode: () => 200 }; } },
     ScriptApp: { getService: () => ({ getUrl: () => opts.url || 'https://script.google.com/macros/s/DEV/exec' }) }
   };
   const dir = path.join(__dirname, '..', 'backend');
@@ -69,6 +70,6 @@ function load(opts) {
     '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_, syncQsc_, seedCalendar };';
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: 'backend.gs' });
-  return { gas: sandbox.__gas, books, props, cache, files, mails, folders };
+  return { gas: sandbox.__gas, books, props, cache, files, mails, folders, fetches };
 }
 module.exports = { load };

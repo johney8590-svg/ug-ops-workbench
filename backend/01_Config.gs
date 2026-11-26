@@ -5,7 +5,7 @@
 const TZ = 'Asia/Taipei';
 
 const TABS = {
-  people:   ['account', 'name', 'role', 'dept', 'email', 'salt', 'pwHash', 'mustChange', 'calToken', 'active'],
+  people:   ['account', 'name', 'role', 'dept', 'email', 'salt', 'pwHash', 'mustChange', 'calToken', 'active', 'lineId'],
   stores:   ['store', 'zone', 'supervisor', 'type', 'active'],
   visits:   ['id', 'date', 'time', 'who', 'store', 'mode', 'kind', 'slot', 'shotTime', 'pass', 'checks', 'note', 'talk', 'fb', 'nudges', 'todos', 'createdAt'],
   todos:    ['id', 'createdAt', 'store', 'source', 'dept', 'text', 'status', 'by', 'photoId', 'notes', 'nudgedAt', 'closedAt', 'closedBy'],

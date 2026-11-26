@@ -237,6 +237,7 @@ function todoNote_(me, d, isNudge) {
   if (isSupervisor_(me) || isDirector_(me)) patch.nudgedAt = today;
   withLock_(function () { Store.update('todos', t._row, patch); });
   audit_(me.account, isNudge ? 'todo.nudge' : 'todo.append', t.id);
+  if (isNudge) linePush_(lineRole_(function (p) { return p.role === 'dept' && p.dept === t.dept; }), '【催辦】' + me.name + '｜' + t.store + '：' + t.text + '（已 ' + todoDays_(t, today) + ' 天）');
   if (isSupervisor_(me) || isDirector_(me)) notify_(t.dept, t.store + ' 催辦：' + t.text, me.name + '：' + text + '\n單號：' + t.id + '（已開啟 ' + todoDays_(t, today) + ' 天）');
   return { todo: todoView_(findTodo_(t.id), today) };
 }
@@ -371,6 +372,7 @@ function journalAck_(me, d) {
   if (!j || j.state !== '已送出') fail_('這份週誌尚未送出');
   withLock_(function () { Store.update('journals', j._row, { readAt: nowStamp_(), reply: str_(d.reply, 2000) }); });
   audit_(me.account, 'journal.ack', j.who + ' ' + wk);
+  if (str_(d.reply, 2000)) linePush_([j.who], '【週誌回覆】' + me.name + '：' + str_(d.reply, 300));
   return {};
 }
 
@@ -519,6 +521,7 @@ function extNote_(me, d) {
   const help = !!d.help && !isDirector_(me);
   withLock_(function () { Store.append('extnotes', { id: uid_('N'), caseId: t.id, store: t.store, at: nowStamp_(), by: me.account, text: text, help: help, doneAt: '', doneBy: '', reply: '' }); });
   audit_(me.account, 'ext.note', t.id + (help ? ' 請總監協助' : ''));
+  if (help) linePush_(lineRole_(function (p) { return p.role === 'director'; }), '【請協助】' + me.name + '｜' + t.store + '（' + t.source + ' ' + t.id + '）\n' + text);
   return { todo: todoView_(t, today_()) };
 }
 function extResolve_(me, d) {
@@ -527,5 +530,6 @@ function extResolve_(me, d) {
   if (!n) fail_('找不到這則說明');
   withLock_(function () { Store.update('extnotes', n._row, { doneAt: nowStamp_(), doneBy: me.account, reply: str_(d.reply, 800) }); });
   audit_(me.account, 'ext.resolve', n.caseId);
+  linePush_([n.by], '【總監已回覆】' + n.store + '（' + n.caseId + '）' + (str_(d.reply, 800) ? '\n' + str_(d.reply, 300) : ''));
   return {};
 }

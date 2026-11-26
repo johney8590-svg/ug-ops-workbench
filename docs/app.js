@@ -477,10 +477,26 @@
   }
 
   /* ---------- 總監晨報 ---------- */
+  function loadBoard() {
+    swr('board', {}, function (d) {
+      var h = seg('bmode', [['brief', '晨報'], ['board', '工作看板']], 'board') + '<div class="sec"><h2>各部門手上的事</h2><span class="small muted right">含三套原系統未結案的單</span></div><div class="card">' +
+        (d.depts.length ? d.depts.map(function (x) {
+          return '<div class="item"><div class="row"><b>' + esc(x.dept) + '</b><span class="chip">未結 ' + x.open + '</span>' + (x.late ? '<span class="chip bad">逾期 ' + x.late + '</span>' : '') + (x.help ? '<span class="chip warn">請協助 ' + x.help + '</span>' : '') + '<span class="small muted right">最久 ' + x.oldest + ' 天</span></div>' +
+            '<div class="small muted">還沒受理 ' + x.wait + '・' + Object.keys(x.bySource).map(function (k) { return esc(k) + ' ' + x.bySource[k]; }).join('・') + '</div></div>';
+        }).join('') : '<div class="empty">沒有未結案的待辦</div>') + '</div>' +
+        (d.anomNew ? '<div class="small muted">另有本月物料異常通報 ' + d.anomNew + ' 筆（當月不算待辦）。</div>' : '') +
+        '<div class="sec"><h2>各督導（本週 ' + esc(md(d.week)) + ' 起）</h2></div>' + d.sups.map(function (x) {
+          return '<button class="card" data-act="b-sup" data-who="' + esc(x.account) + '"><div class="row"><span class="title">' + esc(x.name) + '</span><span class="small muted">' + x.stores + ' 間・今天 ' + esc(x.today) + '</span>' + (x.journal ? '<span class="chip ' + (x.journal === '已送出' ? 'good' : '') + ' right">週誌' + esc(x.journal) + '</span>' : '') + '</div>' +
+            '<div class="chips"><span class="chip">待辦 ' + x.open + '</span>' + (x.late ? '<span class="chip bad">逾期 ' + x.late + '</span>' : '') + (x.need ? '<span class="chip bad">需關注 ' + x.need + ' 店</span>' : '') + '<span class="chip">現場 ' + x.site + '</span><span class="chip">遠端 ' + x.remote + '</span><span class="chip ' + (x.stores && x.camDone === x.stores ? 'good' : '') + '">抽查 ' + x.camDone + '/' + x.stores + '</span></div></button>';
+        }).join('');
+      view().innerHTML = h;
+    });
+  }
   function loadBrief() {
+    if (S.bmode === 'board') return loadBoard();
     swr('brief', {}, function (d) {
       S.data.sups = d.supervisors; if (!S.as && d.supervisors.length) S.as = d.supervisors[0].account;
-      var k = d.kpi, h = '<div class="sec"><h2>晨報 ' + esc(mdw(d.today)) + '</h2><span class="small muted right">營收' + (d.asOf ? '到 ' + esc(md(d.asOf)) : '：' + esc(d.metricsNote)) + '</span></div>' +
+      var k = d.kpi, h = seg('bmode', [['brief', '晨報'], ['board', '工作看板']], 'brief') + '<div class="sec"><h2>晨報 ' + esc(mdw(d.today)) + '</h2><span class="small muted right">營收' + (d.asOf ? '到 ' + esc(md(d.asOf)) : '：' + esc(d.metricsNote)) + '</span></div>' +
         '<div class="kpis"><div class="kpi"><div class="k">昨日營收</div><div class="v num">' + money(k.y) + '</div><div class="s">' + pct(k.ch) + (k.ach !== null ? '・目標 ' + k.ach + '%' : '') + '</div></div>' +
         '<div class="kpi"><div class="k">需關注門市</div><div class="v num">' + d.need.length + '<span class="s"> / ' + k.stores + '</span></div></div>' +
         '<div class="kpi"><div class="k">逾期待辦</div><div class="v num">' + k.late + '<span class="s"> / ' + k.open + ' 未結</span></div></div>' +
@@ -541,6 +557,12 @@
     },
     account: function () {
       openSheet('我的帳號', '<div class="card"><div class="title">' + esc(S.me.name) + '</div><div class="small muted">' + esc(S.me.account) + '・' + esc(S.me.dept) + '</div></div><div class="sec"><h2>變更密碼</h2></div>' + pwForm() + '<div class="btns"><button class="btn danger block" data-act="logout">登出</button></div>');
+      var box = document.createElement('div'); box.id = 'line-box'; topBody().appendChild(box);
+      api('line.status').then(function (r) {
+        if (!r.enabled || !box.isConnected) return;
+        box.innerHTML = '<div class="sec"><h2>LINE 通知</h2></div>' + (r.bound ? '<div class="note good">已綁定，通知會傳到你的 LINE。</div><div class="btns"><button class="btn block" data-act="line-unbind">解除綁定</button></div>'
+          : '<div class="note">綁定後，催辦、公告、總監回覆會直接傳到你的 LINE。</div><div class="btns"><button class="btn primary block" data-act="line-code">取得綁定碼</button></div>');
+      }).catch(function () {});
     },
     logout: function () { api('logout').catch(function () {}).then(function () { setToken(null); S.me = null; S.home = null; S.data = {}; S.as = ''; closeAllSheets(); renderLogin(); }); },
     back: function () { closeSheet(); },
@@ -551,6 +573,7 @@
       if (n === 'scope') { S.sched.scope = v; return loadSched(); }
       if (n === 'smode') { S.sched.mode = v; if (v === 'month') S.sched.month = S.sched.from.slice(0, 7); else if (S.sched.month !== S.sched.from.slice(0, 7)) S.sched.from = S.sched.month === S.today.slice(0, 7) ? monday(S.today) : monday(S.sched.month + '-01'); return loadSched(); }
       if (n === 'pcat') { S.pcat = v; return loadPosts(); }
+      if (n === 'bmode') { S.bmode = v; return loadBrief(); }
       if (!SP) return;
       SP[n] = v; refreshForm();
     },
@@ -590,6 +613,11 @@
         body.innerHTML = ''; body.appendChild(img);
       }).catch(function (e) { body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     },
+    'b-sup': function (b) { S.as = b.dataset.who; go('home'); },
+    'line-code': function (b) {
+      busy(b, api('line.code')).then(function (r) { var el = document.getElementById('line-box'); if (el) el.innerHTML = '<div class="note good">綁定碼：<b class="num">' + esc(r.code) + '</b>（10 分鐘內有效）<br>請加公司的 LINE 官方帳號好友，然後傳訊息：<b>綁定 ' + esc(r.code) + '</b></div>'; }).catch(oops);
+    },
+    'line-unbind': function (b) { busy(b, api('line.unbind')).then(function () { toast('已解除綁定'); closeSheet(); }).catch(oops); },
     'p-new': function () {
       var dir = S.me.role === 'director';
       openSheet('新增公告', '<label class="f">類別<select id="pn-cat">' + (S.data.cats || []).map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +

@@ -30,6 +30,10 @@ const ACTIONS = {
   'post.add':      { fn: postAdd_ },
   'post.decide':   { fn: postDecide_ },
   'post.ack':      { fn: postAck_ },
+  'board':         { fn: board_ },
+  'line.status':   { fn: lineStatus_ },
+  'line.code':     { fn: lineCode_ },
+  'line.unbind':   { fn: lineUnbind_ },
   'brief':         { fn: brief_ }
 };
 
@@ -56,6 +60,7 @@ function doPost(e) {
     let req;
     try { req = JSON.parse(body); } catch (x) { fail_('請求內容不正確'); }
     if (!req || typeof req !== 'object') fail_('請求內容不正確');
+    if (Array.isArray(req.events) && req.action === undefined) { lineWebhook_(req); return reply_({ ok: true }); }   // LINE 平台的 webhook
     return reply_({ ok: true, data: route_(req) });
   } catch (err) {
     // 自己丟出的錯誤（有 code）才把訊息給前端；其他例外只回通用訊息，細節留在執行紀錄

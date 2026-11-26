@@ -129,6 +129,10 @@ const URL_ = 'http://localhost:' + process.env.PORT + '/';
 
   // ---- 總監 ----
   p = await open(); await login(p, 'robert');
+  await p.click('[data-tab=brief]'); await p.click('[data-name=bmode][data-v=board]'); await p.waitForSelector('[data-act=b-sup]');
+  ok(/各部門手上的事/.test(await p.textContent('#view')) && await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '工作看板：顯示且沒有水平捲動'); await shot(p, '9b-board');
+  await p.click('[data-act=b-sup][data-who=jill]'); await p.waitForSelector('#as-sel'); ok((await p.inputValue('#as-sel')) === 'jill', '工作看板：點督導跳到他的門市');
+  await p.click('[data-tab=brief]'); await p.click('[data-name=bmode][data-v=brief]'); await p.waitForSelector('.kpis');
   await p.click('[data-tab=posts]'); await p.waitForSelector('[data-act=p-new]'); await p.click('[data-act=p-new]');
   await p.fill('#pn-title', '冬季新品 SOP v2'); await p.fill('#pn-body', '糖度調整'); await p.click('[data-act=p-add][data-publish="1"]');
   await p.waitForFunction(() => /冬季新品 SOP v2/.test(document.getElementById('view').textContent) && /已確認 0 \/ 10/.test(document.getElementById('view').textContent));

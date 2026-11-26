@@ -299,6 +299,41 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   ok(q20.length === 1 && q20[0].score === '91', 'QSC：同店同日重傳以最後一次為準', q20);
 }
 
+// --- 工作看板 ---
+{
+  r = call('board', {}, jill); ok(!r.ok && r.code === 'forbidden', '工作看板：督導看不到');
+  r = call('board', {}, robert);
+  const bj = r.ok ? r.data.sups.find(x => x.account === 'jill') : {};
+  ok(r.ok && r.data.depts.length >= 2 && r.data.depts.every(x => x.open > 0) && bj.stores === 3 && typeof bj.site === 'number' && bj.journal, '工作看板：部門與督導的統計', r.data ? { depts: r.data.depts, bj } : r);
+}
+// --- LINE 通知與綁定 ---
+{
+  const e9 = seed(load({ props: { LINE_TOKEN: 'TESTTOKEN', REPAIR_SHEET_ID: 'REPAIR' } }), { sample: false });
+  const rp = e9.books.REPAIR.insertSheet('repairs');
+  rp.appendRow(['id', 'createdAt', 'store', 'supervisor', 'occurDate', 'equipment', 'description', 'status', 'handleUnit']);
+  rp.appendRow(['R9', '2026-11-20T02:00:00.000Z', '台北信義店', 'x', '2026-11-20', '製冰機', '壞了', '處理中', '工務']);
+  const post = body => JSON.parse(e9.gas.doPost({ postData: { contents: JSON.stringify(body) } }).content);
+  const c9 = (action, data, token) => post({ action, data, token });
+  const tk = a => c9('login', { account: a, password: 'ugdemo1234' }).data.token;
+  const tj = tk('jill'), tr = tk('robert');
+  const uid = 'U' + 'a'.repeat(32), bound = () => { e9.gas.Store.reset(); return e9.gas.Store.rows('people').filter(p => p.lineId); };
+  const say = (u, text) => post({ destination: 'x', events: [{ type: 'message', replyToken: 'rt', source: { userId: u }, message: { type: 'text', text } }] });
+  r = c9('line.status', {}, tr); ok(r.ok && r.data.enabled && !r.data.bound, 'LINE：未綁定狀態', r);
+  r = say(uid, '綁定 000000'); ok(r.ok && !bound().length, 'LINE：錯的綁定碼綁不上');
+  const code = c9('line.code', {}, tr).data.code;
+  say('not-a-line-id', '綁定 ' + code); ok(!bound().length, 'LINE：格式不對的來源被忽略');
+  say(uid, '綁定 ' + code); ok(bound().length === 1 && bound()[0].account === 'robert' && bound()[0].lineId === uid, 'LINE：正確綁定碼綁到本人');
+  say('U' + 'b'.repeat(32), '綁定 ' + code); ok(bound().length === 1 && bound()[0].lineId === uid, 'LINE：綁定碼只能用一次');
+  r = c9('me', {}, tr); ok(r.ok && JSON.stringify(r).indexOf(uid) < 0, 'LINE：LINE 識別碼不會傳到前端', r);
+  e9.fetches.length = 0;
+  r = c9('ext.note', { id: 'R9', text: '廠商沒來', help: true }, tj);
+  const push = e9.fetches.find(f => /multicast$/.test(f.url));
+  ok(r.ok && push && push.auth === 'Bearer TESTTOKEN' && push.body.to.join() === uid && /請協助/.test(push.body.messages[0].text) && /廠商沒來/.test(push.body.messages[0].text), 'LINE：請協助會推給已綁定的總監', r.ok ? push : r);
+  e9.fetches.length = 0;
+  r = c9('post.add', { cat: '營運', title: 'x', publish: true }, tr); ok(r.ok && e9.fetches.length === 0, 'LINE：沒有人綁定時不呼叫 LINE', r);
+  r = c9('line.unbind', {}, tr); ok(r.ok && !bound().length, 'LINE：可以解除綁定');
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

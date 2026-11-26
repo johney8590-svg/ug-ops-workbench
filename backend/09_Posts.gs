@@ -40,6 +40,8 @@ function postAdd_(me, d) {
       state: publish ? '已公告' : '待核定', createdAt: now, createdBy: me.account, approvedAt: publish ? now : '', approvedBy: publish ? me.account : '' });
   });
   audit_(me.account, 'post.add', d.cat + ' ' + title + (publish ? '（直接公告）' : ''));
+  if (publish) linePush_(lineRole_(function (x) { return x.role !== 'director'; }), '【' + d.cat + '公告】' + title + '\n請到工作台閱讀並按「我已閱讀並了解」。');
+  else linePush_(lineRole_(function (x) { return x.role === 'director'; }), '【公告待核定】' + me.name + '：' + d.cat + '｜' + title);
   return { published: publish };
 }
 function postDecide_(me, d) {
@@ -50,6 +52,7 @@ function postDecide_(me, d) {
   if (d.approve) { const t = str_(d.title, 80), b = str_(d.body, 3000); if (t) patch.title = t; if (d.body !== undefined) patch.body = b; }
   withLock_(function () { Store.update('posts', p._row, patch); });
   audit_(me.account, d.approve ? 'post.approve' : 'post.reject', p.id);
+  if (d.approve) linePush_(lineRole_(function (x) { return x.role !== 'director'; }), '【' + p.cat + '公告】' + (patch.title || p.title) + '\n請到工作台閱讀並按「我已閱讀並了解」。');
   return {};
 }
 function postAck_(me, d) {
