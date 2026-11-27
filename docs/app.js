@@ -407,6 +407,29 @@
   }
   function schedFoot() { return '<div class="btns"><button class="btn primary grow" data-act="ev-new">＋ 新增行程</button><button class="btn grow" data-act="cal">加到手機行事曆</button></div>'; }
   function monthAdd(ym, n) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + ('0' + (m + 1)).slice(-2); }
+  /** 看同仁行程：一個人一列，日期一欄，格子裡依序列出要去的門市。 */
+  function peopleGrid(d, from, to) {
+    var days = []; for (var x = from; x <= to; x = addDays(x, 1)) days.push(x);
+    var people = d.people.slice().sort(function (a, b) { return (b.account === S.me.account) - (a.account === S.me.account) || (a.role === 'dept') - (b.role === 'dept') || 0; });
+    var isOff = function (day) { var m = d.days.filter(function (k) { return k.date === day; }); return m.some(function (k) { return k.kind === '假日' || k.kind === '補假'; }) || ((dow(day) === 0 || dow(day) === 6) && !m.some(function (k) { return k.kind === '補班'; })); };
+    var h = '<div class="pg-wrap"><table class="pg' + (days.length > 7 ? ' wide' : '') + '"><thead><tr><th class="pg-n">同仁</th>' + days.map(function (day) {
+      var m = d.days.filter(function (k) { return k.date === day; })[0];
+      return '<th class="' + (isOff(day) ? 'off ' : '') + (day === S.today ? 'today' : '') + '"><span class="num">' + esc(md(day)) + '</span> ' + WD[dow(day)] + (m ? '<span class="pg-h">' + esc(m.name.split('・')[0].slice(0, 5)) + '</span>' : '') + '</th>';
+    }).join('') + '</tr></thead><tbody>';
+    people.forEach(function (p) {
+      var can = S.me.role === 'director' || p.account === S.me.account;
+      h += '<tr><th class="pg-n">' + esc(p.name) + '</th>' + days.map(function (day) {
+        var list = d.events.filter(function (e) { return e.who === p.account && e.start <= day && e.end >= day; });
+        var cls = (isOff(day) ? 'off ' : '') + (day === S.today ? 'today' : '');
+        var inner = list.map(function (e) {
+          var txt = e.type === '巡店' ? esc(e.place) : '<i>' + esc(e.type) + '</i>' + (e.place && e.place !== e.type ? '・' + esc(e.place) : '');
+          return can ? '<button class="pg-e t-' + (e.type === '巡店' ? 'v' : e.type === '請假' ? 'l' : 'o') + '" data-act="ev-edit" data-id="' + esc(e.id) + '">' + txt + '</button>' : '<span class="pg-e t-' + (e.type === '巡店' ? 'v' : e.type === '請假' ? 'l' : 'o') + '">' + txt + '</span>';
+        }).join('');
+        return '<td class="' + cls + '">' + (inner || (can ? '<button class="pg-add" data-act="ev-new" data-day="' + day + '" aria-label="在 ' + esc(md(day)) + ' 新增行程">＋</button>' : '')) + '</td>';
+      }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div><div class="small muted">一個人一列，格子裡是當天要去的門市（依排入順序）。斜體是巡店以外的行程。' + (days.length > 7 ? '可以左右滑動看整個月。' : '') + '</div>';
+  }
   function loadMonth() {
     var ym = S.sched.month, first = ym + '-01', last = addDays(monthAdd(ym, 1) + '-01', -1), from = monday(first), to = addDays(monday(last), 6);
     swr('events.list', { from: from, to: to }, function (d) {
@@ -414,7 +437,9 @@
       S.data.people = d.people; S.data.stores = d.stores || []; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days;
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
       var h = '<div class="row"><button class="btn sm" data-act="mo" data-n="-1" aria-label="上個月">←</button><b class="num">' + (+ym.slice(0, 4)) + ' 年 ' + (+ym.slice(5, 7)) + ' 月</b><button class="btn sm" data-act="mo" data-n="1" aria-label="下個月">→</button>' +
-        (ym !== S.today.slice(0, 7) ? '<button class="btn sm" data-act="mo" data-n="0">回本月</button>' : '') + '</div>' + schedHead() +
+        (ym !== S.today.slice(0, 7) ? '<button class="btn sm" data-act="mo" data-n="0">回本月</button>' : '') + '</div>' + schedHead();
+      if (S.sched.scope === 'all') { view().innerHTML = h + peopleGrid(d, first, last) + schedFoot(); var td = view().querySelector('.pg th.today'); if (td && td.scrollIntoView) td.scrollIntoView({ block: 'nearest', inline: 'center' }); return; }
+      h +=
         '<div class="cal"><div class="cal-h">' + [1, 2, 3, 4, 5, 6, 0].map(function (w) { return '<span>' + WD[w] + '</span>'; }).join('') + '</div><div class="cal-g">';
       for (var day = from; day <= to; day = addDays(day, 1)) {
         var list = evs.filter(function (e) { return e.start <= day && e.end >= day; }), marks = d.days.filter(function (x) { return x.date === day; });
@@ -440,6 +465,7 @@
     swr('events.list', { from: from, to: to }, function (d) {
       S.data.people = d.people; S.data.stores = d.stores || []; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days || [];
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
+      if (S.sched.scope === 'all') { view().innerHTML = '<div class="row"><button class="btn sm" data-act="wk" data-n="-7" aria-label="上一週">←</button><b class="num">' + esc(md(from)) + ' – ' + esc(md(to)) + '</b><button class="btn sm" data-act="wk" data-n="7" aria-label="下一週">→</button>' + (from !== monday(S.today) ? '<button class="btn sm" data-act="wk" data-n="0">回本週</button>' : '') + '</div>' + schedHead() + peopleGrid(d, from, to) + schedFoot(); return; }
       var h = '<div class="row"><button class="btn sm" data-act="wk" data-n="-7" aria-label="上一週">←</button><b class="num">' + esc(md(from)) + ' – ' + esc(md(to)) + '</b><button class="btn sm" data-act="wk" data-n="7" aria-label="下一週">→</button>' +
         (from !== monday(S.today) ? '<button class="btn sm" data-act="wk" data-n="0">回本週</button>' : '') + '</div>' +
         schedHead() + '<div class="card">';

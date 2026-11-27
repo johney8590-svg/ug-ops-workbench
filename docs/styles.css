@@ -202,3 +202,23 @@ details.more .grp{margin-top:10px}
 .pick label{border-radius:999px}
 .pick label:has(input:checked){background:var(--tea-soft);border-color:var(--brand);color:var(--brand-ink)}
 [hidden]{display:none !important}
+
+/* 同仁行程：一人一列 */
+.pg-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--surface);border-radius:12px;box-shadow:var(--card-shadow);margin:10px 0}
+table.pg{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed;font-size:13px}
+table.pg.wide{width:max-content;table-layout:auto}
+.pg th,.pg td{border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:6px;vertical-align:top;text-align:left;font-weight:400}
+.pg thead th{font-size:12px;color:var(--muted);white-space:nowrap;background:var(--surface);position:sticky;top:0}
+.pg.wide thead th:not(.pg-n),.pg.wide td{min-width:104px;max-width:150px}
+.pg .pg-n{position:sticky;left:0;z-index:2;background:var(--surface);width:72px;min-width:72px;font-weight:700;color:var(--ink);font-size:13.5px;box-shadow:1px 0 0 var(--line-2)}
+.pg thead .pg-n{z-index:3;font-weight:400;color:var(--muted)}
+.pg .off{background:var(--surface-2)} .pg thead th.off{color:var(--bad-ink)}
+.pg .today{background:var(--tea-soft)} .pg thead th.today{color:var(--brand-ink);font-weight:700}
+.pg-h{display:block;font-size:11px;color:var(--warn-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-e{display:block;width:100%;text-align:left;background:none;border:0;border-left:3px solid var(--brand);padding:2px 0 2px 6px;margin:0 0 4px;font-size:13px;line-height:1.35;word-break:break-all}
+button.pg-e{cursor:pointer} button.pg-e:hover{background:var(--surface-2)}
+.pg-e.t-o{border-left-color:var(--warn)} .pg-e.t-l{border-left-color:var(--line-2);color:var(--muted)}
+.pg-e i{font-style:normal;color:var(--muted)}
+.pg-add{width:100%;min-height:36px;background:none;border:0;color:var(--line-2);font-size:16px;cursor:pointer;opacity:0}
+td:hover > .pg-add,.pg-add:focus{opacity:1}
+@media (max-width:959px){ table.pg{width:max-content;table-layout:auto} .pg thead th:not(.pg-n),.pg td{min-width:96px;max-width:132px} .pg-add{opacity:.6} }
