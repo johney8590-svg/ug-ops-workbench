@@ -114,6 +114,27 @@ function resetPassword(account) {
   audit_('admin', 'password.reset', p.account);
   return '已重設，新密碼在「初始密碼」分頁。';
 }
+/**
+ * 把所有啟用中帳號的密碼一次設成同一組臨時密碼。
+ * 密碼不寫在程式裡：先在「指令碼屬性」加一筆 TEMP_PASSWORD，再執行這個函式；執行完會自動把那筆屬性刪掉。
+ * 所有人會被登出，第一次用臨時密碼登入時會被要求改成自己的密碼。
+ */
+function setAllPasswords() {
+  Store.reset();
+  const pw = String(prop_('TEMP_PASSWORD') || '');
+  if (pw.length < 8) throw new Error('請先在指令碼屬性加上 TEMP_PASSWORD（至少 8 個字元）');
+  let n = 0;
+  withLock_(function () {
+    Store.rows('people').filter(function (p) { return p.account && yes_(p.active); }).map(function (p) { return p.account; })
+      .forEach(function (a) { setPassword_(person_(a), pw); n++; });
+  });
+  PropertiesService.getScriptProperties().deleteProperty('TEMP_PASSWORD');
+  const sh = Store.ss().getSheetByName('初始密碼');
+  if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);   // 舊的初始密碼已經失效，清掉避免混淆
+  audit_('admin', 'password.setall', n + ' 個帳號');
+  console.log('已把 ' + n + ' 個帳號設成臨時密碼；每個人第一次登入都要改密碼。');
+  return n;
+}
 function resetPasswordPrompt() {
   const ui = SpreadsheetApp.getUi();
   const r = ui.prompt('重設密碼', '請輸入帳號', ui.ButtonSet.OK_CANCEL);

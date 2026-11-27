@@ -38,7 +38,7 @@ function load(opts) {
   const sandbox = {
     console,
     SpreadsheetApp: { openById(id) { if (!books[id]) throw new Error('no such spreadsheet'); return books[id]; }, getActiveSpreadsheet: () => books.DATA, getUi() { throw new Error('no ui'); } },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty(k, v) { props[k] = v; } }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty(k, v) { props[k] = v; }, deleteProperty(k) { delete props[k]; } }) },
     CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put(k, v) { if (Buffer.byteLength(String(v)) > 100000) throw new Error('Argument too large'); cache[k] = String(v); }, remove(k) { delete cache[k]; },
       getAll(ks) { const o = {}; ks.forEach(k => { if (k in cache) o[k] = cache[k]; }); return o; }, putAll(o) { Object.keys(o).forEach(k => { if (Buffer.byteLength(String(o[k])) > 100000) throw new Error('Argument too large'); cache[k] = String(o[k]); }); } }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
@@ -68,7 +68,7 @@ function load(opts) {
   };
   const dir = path.join(__dirname, '..', 'backend');
   const src = fs.readdirSync(dir).filter(f => f.endsWith('.gs')).sort().map(f => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n;\n') +
-    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_, syncQsc_, seedCalendar };';
+    '\n;globalThis.__gas = { doPost, doGet, setup, issuePasswords, importStores, resetPassword, setAllPasswords, Store, hashPw_, computeMetrics_, warmCache, scanPostFolders_, syncQsc_, seedCalendar };';
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox, { filename: 'backend.gs' });
   return { gas: sandbox.__gas, books, props, cache, files, mails, folders, fetches };

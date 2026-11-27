@@ -352,6 +352,22 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   e8.gas.warmCache(); ok(e8.gas.Store.rows('visits').some(v => v.id === 'VM'), '暫存：排程重讀後生效');
 }
 
+// --- 一次設定臨時密碼 ---
+{
+  const e7 = seed(load({ props: {} }), { sample: false });
+  const c7 = (action, data, token) => JSON.parse(e7.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const old = c7('login', { account: 'jill', password: 'ugdemo1234' }).data.token;
+  let threw = false; try { e7.gas.setAllPasswords(); } catch (x) { threw = true; }
+  ok(threw, '臨時密碼：沒設屬性不會執行');
+  e7.props.TEMP_PASSWORD = 'Temp-pass-01';
+  const n = e7.gas.setAllPasswords();
+  ok(n >= 10 && !('TEMP_PASSWORD' in e7.props), '臨時密碼：全部帳號都設好，屬性用完即刪', n);
+  ok(!c7('home', {}, old).ok && !c7('login', { account: 'jill', password: 'ugdemo1234' }).ok, '臨時密碼：舊密碼與舊登入都失效');
+  r = c7('login', { account: 'jill', password: 'Temp-pass-01' });
+  ok(r.ok && r.data.me.mustChange === true && c7('home', {}, r.data.token).code === 'must_change', '臨時密碼：登入後必須先改密碼', r);
+  ok(!JSON.stringify(e7.books.DATA._sheets.people._rows).includes('Temp-pass-01'), '臨時密碼：資料表不存明碼');
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();
