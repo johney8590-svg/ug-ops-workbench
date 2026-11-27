@@ -146,13 +146,16 @@ function complaintStats_(store) {
  * 把別的系統寫的店名對回主檔的店名：差一個「店」字或空白算同一間；
  * 客訴表常用簡寫（例：「南西」「桃園藝文」），完全相同對不到時，找「結尾相同」且唯一的那一間，再不行找「包含這幾個字」且唯一的那一間。對不到回傳空字串。
  */
+/** 別的表裡的簡寫對不出唯一一間時，在這裡指定（營運經理 2026-11-27：客訴表的「巨蛋」＝台北大巨蛋店）。也可用指令碼屬性 STORE_ALIASES（JSON）追加。 */
+const STORE_ALIAS = { '巨蛋': '台北大巨蛋店' };
 function storeResolver_() {
   const byNorm = {}; activeStores_().forEach(function (s) { byNorm[normStore_(s.store)] = s.store; });
-  const norms = Object.keys(byNorm), memo = {};
+  const norms = Object.keys(byNorm), memo = {}, alias = {}, extra = J_(prop_('STORE_ALIASES'), {});
+  [STORE_ALIAS, extra && typeof extra === 'object' ? extra : {}].forEach(function (o) { Object.keys(o).forEach(function (k) { alias[normStore_(k)] = normStore_(o[k]); }); });
   return function (name) {
     const k = normStore_(name);
     if (memo[k] !== undefined) return memo[k];
-    let m = byNorm[k] || '';
+    let m = byNorm[k] || (alias[k] && byNorm[alias[k]]) || '';
     if (!m && k.length >= 2) { const c = norms.filter(function (x) { return x.slice(-k.length) === k; }); if (c.length === 1) m = byNorm[c[0]]; }
     if (!m && k.length >= 2) { const c = norms.filter(function (x) { return x.indexOf(k) >= 0; }); if (c.length === 1) m = byNorm[c[0]]; }   // 再放寬：店名裡有這幾個字、而且只有一間
     return (memo[k] = m);
