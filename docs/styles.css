@@ -160,3 +160,37 @@ input[type=text],input[type=password],input[type=date],input[type=time],select,t
 .sheet-top h2{color:var(--on-head);font-weight:700}
 .back{color:var(--on-head)}
 .seg button[aria-pressed=true]{font-weight:700}
+
+/* ---------- 電腦版（寬螢幕）：左側選單、內容加寬並排、表單從右側滑出 ---------- */
+@media (min-width: 960px){
+  body{font-size:15px}
+  .wrap{max-width:none;padding:0 28px}
+  header.top{position:fixed;left:0;right:0;top:0;height:56px}
+  header.top .top-row{height:56px}
+  nav.tabs{top:56px;bottom:0;right:auto;width:200px;border-top:0;border-right:1px solid var(--line);padding:16px 0}
+  nav.tabs .wrap{flex-direction:column;padding:0 12px;gap:4px}
+  nav.tabs button{flex:none;text-align:left;padding:10px 14px;min-height:44px;font-size:15px;border-top:0;margin:0;border-radius:10px;cursor:pointer}
+  nav.tabs button:hover{background:var(--surface-2)}
+  nav.tabs button[aria-current="page"]{background:var(--tea-soft);color:var(--brand-ink)}
+  main.wrap{margin:56px 0 0 200px;max-width:1240px;padding:8px 32px 48px;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));column-gap:14px;align-items:start}
+  main.wrap > *{grid-column:1/-1}
+  main.wrap > button.card{grid-column:auto;margin-bottom:14px;align-self:stretch}
+  main.wrap > .seg{max-width:420px}
+  main.wrap > .btns{max-width:520px}
+  .kpis{flex-wrap:nowrap}
+  .kpi{flex:1 1 0}
+  .kpi .v{font-size:26px}
+  button.card{transition:box-shadow .12s}
+  button.card:hover{box-shadow:0 2px 10px rgba(40,38,30,.12),0 0 0 1px var(--line-2)}
+  .btn:hover{filter:brightness(.97)}
+  .cal-c{min-height:104px;padding:6px 8px}
+  .cal-c:hover{background:var(--surface-2)}
+  /* 門市頁、表單：不蓋滿整個畫面，從右邊開一個面板，後面的清單還看得到 */
+  #sheets .sheet{left:auto;width:min(620px,100vw);box-shadow:-8px 0 30px rgba(0,0,0,.18);z-index:21}
+  #sheets .sheet::before{content:"";position:fixed;inset:0 min(620px,100vw) 0 0;background:var(--scrim)}
+  #sheets .sheet + .sheet::before{display:none}
+  .sheet .wrap{padding:0 24px}
+  #toast{bottom:32px}
+  .login{padding-top:18vh}
+}
+@media (min-width: 960px) and (prefers-reduced-motion: reduce){button.card{transition:none}}

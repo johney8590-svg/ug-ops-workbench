@@ -749,6 +749,7 @@
     if (t.id === 'shot') onShot(t.files[0]);
     if (t.id === 'as-sel') { S.as = t.value; loadHome(); }
   });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && stack.length) closeSheet(); });   // 電腦上按 Esc 關掉面板
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && (ev.target.id === 'lg-p' || ev.target.id === 'lg-a')) { var b = document.querySelector('[data-act="login"]'); if (b) b.click(); } });
 
   boot();
