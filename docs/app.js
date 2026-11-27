@@ -188,11 +188,14 @@
       '<div class="kpi"><div class="k">抽查完成</div><div class="v num">' + w.camDone + '<span class="s"> / ' + w.stores + ' 店</span></div></div><div class="kpi"><div class="k">催辦・回報</div><div class="v num">' + (w.nudges + w.todos) + '</div></div></div>';
     h += '<div class="sec"><h2>門市（需要處理的排前面）</h2></div>';
     if (!cards.length) h += '<div class="empty">還沒有分配門市。請營運經理在 stores 分頁填上負責督導。</div>';
-    cards.forEach(function (c) {
-      h += '<button class="card" data-act="store" data-store="' + esc(c.store) + '" data-today="' + (c.today ? 1 : 0) + '"><div class="row"><span class="title">' + esc(c.store) + '</span>' + (c.today ? '<span class="chip today">今日行程</span>' : '') + '</div>' +
+    var cardHtml = function (c) {
+      return '<button class="card" data-act="store" data-store="' + esc(c.store) + '" data-today="' + (c.today ? 1 : 0) + '"><div class="row"><span class="title">' + esc(c.store) + '</span>' + (c.today ? '<span class="chip today">今日行程</span>' : '') + (c.sup ? '<span class="small muted">督導 ' + esc(c.sup) + '</span>' : '') + '</div>' +
         '<div class="row">' + metricLine(c.m) + '</div><div class="row">' + camDots(c.cam) + '</div>' +
         (c.reasons.length ? '<div class="chips">' + c.reasons.map(function (r) { return '<span class="chip ' + (r[0] === 'bad' ? 'bad' : r[0] === 'info' ? '' : 'warn') + '">' + esc(r[1]) + '</span>'; }).join('') + '</div>' : '<div class="chips"><span class="chip good">目前沒有待處理</span></div>') + '</button>';
-    });
+    };
+    h += cards.map(cardHtml).join('');
+    if (d.guest && d.guest.length) h += '<div class="sec"><h2>今天要去的其他門市</h2></div>' + d.guest.map(cardHtml).join('');
+    if (mine && d.others && d.others.length) h += '<div class="btns"><button class="btn block" data-act="st-other">開啟其他門市（去別人的店巡訪）</button></div>';
     view().innerHTML = h;
   }
   function loadHome() {
@@ -410,7 +413,7 @@
   /** 看同仁行程：一個人一列，日期一欄，格子裡依序列出要去的門市。 */
   function peopleGrid(d, from, to) {
     var days = []; for (var x = from; x <= to; x = addDays(x, 1)) days.push(x);
-    var people = d.people.slice().sort(function (a, b) { return (b.account === S.me.account) - (a.account === S.me.account) || (a.role === 'dept') - (b.role === 'dept') || 0; });
+    var people = (S.me.role === 'director' ? d.people.filter(function (p) { return p.role === 'supervisor'; }) : d.people.slice()).sort(function (a, b) { return (b.account === S.me.account) - (a.account === S.me.account) || (a.role === 'dept') - (b.role === 'dept') || 0; });
     var isOff = function (day) { var m = d.days.filter(function (k) { return k.date === day; }); return m.some(function (k) { return k.kind === '假日' || k.kind === '補假'; }) || ((dow(day) === 0 || dow(day) === 6) && !m.some(function (k) { return k.kind === '補班'; })); };
     var h = '<div class="pg-wrap"><table class="pg' + (days.length > 7 ? ' wide' : '') + '"><thead><tr><th class="pg-n">同仁</th>' + days.map(function (day) {
       var m = d.days.filter(function (k) { return k.date === day; })[0];
@@ -702,6 +705,12 @@
         body.innerHTML = ''; body.appendChild(img);
       }).catch(function (e) { body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     },
+    'st-other': function () {
+      var groups = {}, order = []; (S.home.others || []).forEach(function (x) { var k = x.sup || '尚未指定督導'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(x); });
+      openSheet('其他門市', '<p class="muted small">選一間門市就能看它的狀況、填訪店紀錄。</p><input type="text" id="st-q" placeholder="輸入店名或督導名字篩選" autocomplete="off">' +
+        order.map(function (k) { return '<div class="grp"><div class="sec"><h2>' + esc(k) + '</h2></div><div class="pick">' + groups[k].map(function (x) { return '<button class="btn sm" data-act="st-pick" data-q="' + esc(x.store + ' ' + x.sup) + '" data-store="' + esc(x.store) + '">' + esc(x.store) + '</button>'; }).join('') + '</div></div>'; }).join(''));
+    },
+    'st-pick': function (b) { var n = b.dataset.store; closeSheet(true); openStore(n, true); },
     'b-sup': function (b) { S.as = b.dataset.who; go('home'); },
     'line-code': function (b) {
       busy(b, api('line.code')).then(function (r) { var el = document.getElementById('line-box'); if (el) el.innerHTML = '<div class="note good">綁定碼：<b class="num">' + esc(r.code) + '</b>（10 分鐘內有效）<br>請加公司的 LINE 官方帳號好友，然後傳訊息：<b>綁定 ' + esc(r.code) + '</b></div>'; }).catch(oops);
@@ -788,10 +797,10 @@
     }
   });
   document.addEventListener('input', function (ev) {
-    if (ev.target.id !== 'ev-q') return;
+    if (ev.target.id !== 'ev-q' && ev.target.id !== 'st-q') return;
     var q = ev.target.value.trim().toLowerCase(), box = ev.target.parentNode;
-    Array.prototype.forEach.call(box.querySelectorAll('label[data-q]'), function (l) { l.hidden = !!q && l.dataset.q.toLowerCase().indexOf(q) < 0 && !l.querySelector('input').checked; });
-    Array.prototype.forEach.call(box.querySelectorAll('.grp'), function (g) { g.hidden = !g.querySelector('label[data-q]:not([hidden])'); });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-q]'), function (l) { var c = l.querySelector('input'); l.hidden = !!q && l.dataset.q.toLowerCase().indexOf(q) < 0 && !(c && c.checked); });
+    Array.prototype.forEach.call(box.querySelectorAll('.grp'), function (g) { g.hidden = !g.querySelector('[data-q]:not([hidden])'); });
   });
   document.addEventListener('change', function (ev) {
     if (ev.target.id === 'ev-type') evMode();

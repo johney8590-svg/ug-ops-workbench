@@ -38,13 +38,14 @@ r = call('home', { as: 'jill' }, gongwu); ok(!r.ok && r.code === 'forbidden', '�
 r = call('store', { store: '台北信義店' }, jill);
 ok(r.ok && r.data.todos.length === 2 && r.data.qsc.score === 86 && r.data.qsc.fails.length === 2, '門市頁：待辦與 QSC', r);
 ok(r.data.todos[0].late === true, '逾期排最前');
-r = call('store', { store: '板橋府中店' }, jill); ok(!r.ok && r.code === 'forbidden', '督導不能看別人的門市', r);
+r = call('store', { store: '板橋府中店' }, jill); ok(r.ok && r.data.store === '板橋府中店', '督導可以開別人的門市頁（去別人的店巡訪）', r);
+r = call('store', { store: '不存在的店' }, jill); ok(!r.ok && r.code === 'forbidden', '不存在的門市被拒', r);
 
 // --- 訪店紀錄 ---
 r = call('visit.add', { store: '台北信義店', mode: '現場' }, jill); ok(!r.ok, '空白紀錄被拒', r);
 r = call('visit.add', { store: '台北信義店', mode: '現場', talk: '檢查製冰機，與店長確認備料', fb: '尖峰人手不足', nudges: ['RP-demo01', 'nope'] }, jill);
 ok(r.ok && r.data.pass === false, '現場紀錄存檔', r);
-r = call('visit.add', { store: '板橋府中店', mode: '現場', talk: 'x' }, jill); ok(!r.ok && r.code === 'forbidden', '不能幫別人的門市寫紀錄', r);
+r = call('visit.add', { store: '不存在的店', mode: '現場', talk: 'x' }, jill); ok(!r.ok && r.code === 'forbidden', '不存在的門市不能寫紀錄', r);
 r = call('visit.add', { store: '台北南京店', mode: '遠端', kind: '監視器抽查', slot: '營業中', shotTime: '15:10', shotDate: TODAY, checks: { '每小時消毒作業': 'ok', '均質秒數': 'ng', '亂填': 'ok' }, note: '均質只有 5 秒' }, jill);
 ok(r.ok && r.data.pass === true && r.data.cam.join() === '開班,營業中', '營業中抽查通過並累計', r);
 r = call('visit.add', { store: '台北南京店', mode: '遠端', kind: '監視器抽查', slot: '閉店', shotTime: '15:10', shotDate: TODAY }, jill);
@@ -65,11 +66,12 @@ ok(r.ok && /^RP-/.test(r.data.todo.id) && r.data.todo.dept === '工務' && r.dat
 const newId = r.data.todo.id;
 ok(env.mails.some(m => m.subject.includes('冷藏冰箱')), '通知處理單位');
 r = call('photo.get', { id: newId }, jill); ok(r.ok && r.data.data === png, '照片可讀回', r);
-r = call('photo.get', { id: newId }, joyce); ok(!r.ok && r.code === 'forbidden', '別的督導不能看照片', r);
+r = call('photo.get', { id: newId }, joyce); ok(r.ok, '別的督導可以看門市待辦的照片', r);
+r = call('photo.get', { id: newId }, caigou); ok(!r.ok && r.code === 'forbidden', '不相關的部門不能看照片', r);
 r = call('photo.get', { id: newId }, caigou); ok(!r.ok && r.code === 'forbidden', '別的部門不能看照片', r);
 r = call('todo.add', { store: '台北公館店', text: 'x', photo: { type: 'text/html', data: 'PGI+' }, force: true }, jill); ok(!r.ok, '非圖片檔被拒', r);
 r = call('todo.nudge', { id: 'RP-demo01' }, jill); ok(r.ok && r.data.todo.nudgedToday, '催辦', r);
-r = call('todo.nudge', { id: 'RP-demo04' }, jill); ok(!r.ok && r.code === 'forbidden', '不能催別人門市的單', r);
+r = call('todo.list', {}, jill); ok(r.ok && !r.data.todos.some(t => t.id === 'RP-demo04'), '待辦清單仍只列自己門市的');
 r = call('todo.status', { id: 'RP-demo01', status: '已完成' }, jill); ok(!r.ok && r.code === 'forbidden', '督導不能自己結案', r);
 r = call('todo.status', { id: 'RP-demo01', status: '已完成' }, caigou); ok(!r.ok && r.code === 'forbidden', '別的部門不能結案', r);
 r = call('todo.list', {}, gongwu); ok(r.ok && r.data.todos.every(t => t.dept === '工務') && r.data.todos.length === 3, '部門只看到自己的待辦', r.data && r.data.todos.length);
@@ -148,7 +150,7 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   const tj = c3('login', { account: 'jill', password: 'ugdemo1234' }).data.token, tr = c3('login', { account: 'robert', password: 'ugdemo1234' }).data.token;
   r = c3('home', {}, tj);
   ok(r.ok && r.data.cards.length === 1 && r.data.cards[0].store === '台北信義' && r.data.cards[0].m && r.data.cards[0].m.y > 0, '主檔連動：督導門市來自主檔，名稱少一個店字也對得到營收', r);
-  r = c3('store', { store: '台北南京店' }, tj); ok(!r.ok && r.code === 'forbidden', '主檔連動：不是自己的門市仍被拒', r);
+  r = c3('store', { store: '台北南京店' }, tj); ok(r.ok, '主檔連動：別人的門市也能開', r);
   r = c3('brief', {}, tr);
   ok(r.ok && r.data.kpi.stores === 3 && r.data.unassigned.length === 1 && r.data.unassigned[0].supName === '林凱琳 Liisa', '主檔連動：對不到帳號的督導會列出來', r.data && r.data.unassigned);
   ok(r.data.supervisors.some(p => p.account === 'robert'), '主檔連動：營運經理自己有門市時可切換檢視');
@@ -193,7 +195,7 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c4('brief', {}, tr); ok(r.data.kpi.open === 4 && r.data.late.some(t => t.id === 'R20261110-0001') && r.data.anom.total === 1 && r.data.anom.stores[0].store === '台北信義店', '外部案件：進晨報；本月物料異常另列', r.data.anom);
   // 補充說明與請營運經理協助
   r = c4('ext.note', { id: 'R20261110-0001', text: '', help: true }, tj); ok(!r.ok, '補充說明：空白被拒');
-  r = c4('ext.note', { id: 'R20261122-0003', text: 'x' }, tj); ok(!r.ok && r.code === 'forbidden', '補充說明：別人門市的案件不能寫', r);
+  r = c4('ext.note', { id: 'R-not-exist', text: 'x' }, tj); ok(!r.ok, '補充說明：不存在的案件不能寫', r);
   r = c4('ext.note', { id: 'R20261110-0001', text: '廠商來兩次沒修好', help: true }, tj); ok(r.ok && r.data.todo.help === true && r.data.todo.notes[0].help, '補充說明：督導請營運經理協助', r);
   r = c4('ext.note', { id: 'A001', text: '採購已補寄' }, tc); ok(r.ok && !r.data.todo.help, '補充說明：處理單位也能補充（不帶協助請求）', r);
   r = c4('brief', {}, tr); ok(r.data.help.length === 1 && r.data.help[0].id === 'R20261110-0001', '補充說明：晨報列出待協助案件', r.data.help);
@@ -270,7 +272,7 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   const rid = r.data.todo.id;
   r = c7('photo.get', { id: rid }, tj); ok(r.ok && r.data.data === png, '寫回：督導可看照片', r);
   r = c7('photo.get', { id: rid }, tg); ok(r.ok, '寫回：處理單位可看照片');
-  r = c7('photo.get', { id: rid }, tk('joyce')); ok(!r.ok && r.code === 'forbidden', '寫回：別的督導不能看照片');
+  r = c7('photo.get', { id: rid }, tk('joyce')); ok(r.ok, '寫回：別的督導也能看照片');
   r = c7('store', { store: '台北信義店' }, tj); ok(r.data.todos.some(t => t.id === rid), '寫回：立刻出現在門市頁');
   r = c7('visit.add', { store: '台北信義店', mode: '現場', talk: 'x', todos: [rid] }, tj); ok(r.ok, '寫回：可記入訪店紀錄');
   r = c7('journal.get', {}, tj); ok(/回報修繕（工務）：台北信義店 其他：=冷氣漏水/.test(r.data.draft.issue), '寫回：進週誌草稿', r.data.draft.issue);
@@ -344,6 +346,19 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = call('events.list', { from: '2026-12-08', to: '2026-12-08' }, jill);
   ok(r.data.events.filter(e => e.who === 'jill' && e.start === '2026-12-08').map(e => e.place).sort().join() === ['台北信義店', other.store].sort().join(), '行程：別人的店也有紀錄', r.data.events);
   r = call('events.add', { type: '巡店', start: '2026-12-08', places: ['不存在的店'] }, jill); ok(!r.ok, '行程：全部不認得的店會被擋');
+}
+
+// --- 去別人的店巡訪 ---
+{
+  const e5 = seed(load({ props: { PHOTO_FOLDER_ID: 'PHOTOS' } }));
+  const c5 = (action, data, token) => JSON.parse(e5.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tj = c5('login', { account: 'jill', password: 'ugdemo1234' }).data.token;
+  r = c5('home', {}, tj); ok(r.ok && r.data.guest.length === 0 && r.data.others.some(x => x.store === '板橋府中店' && x.sup === 'Joyce') && !r.data.others.some(x => x.store === '台北信義店'), '別人的店：首頁附上其他門市清單', r.ok ? r.data.others.slice(0, 3) : r);
+  c5('events.add', { type: '巡店', start: TODAY, places: ['板橋府中店'] }, tj);
+  r = c5('home', {}, tj); ok(r.data.guest.length === 1 && r.data.guest[0].store === '板橋府中店' && r.data.guest[0].today && r.data.guest[0].sup === 'Joyce' && r.data.cards.length === 3, '別人的店：今天排了就出現在首頁', r.data.guest);
+  r = c5('visit.add', { store: '板橋府中店', mode: '現場', talk: '協助新人訓練' }, tj); ok(r.ok, '別人的店：可以填訪店紀錄', r);
+  r = c5('journal.get', {}, tj); ok(r.ok && /板橋府中店/.test(r.data.draft.found), '別人的店：紀錄會帶進自己的週誌', r.ok ? r.data.draft.found : r);
+  r = c5('home', {}, tj); ok(r.data.week.site >= 1, '別人的店：算進自己本週現場次數');
 }
 
 // --- 速度：一次查多個畫面、暫存 ---

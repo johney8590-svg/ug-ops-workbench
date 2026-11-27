@@ -90,11 +90,16 @@ function home_(me, d) {
   const places = todayEv.filter(function (e) { return e.type === '巡店' || e.type === '外出'; }).map(function (e) { return e.place; });
   const stores = activeStores_().filter(function (s) { return s.supervisor === who; });
   const cards = stores.map(function (s) { return storeCard_(s, c, places); });
+  // 今天排了要去、但不是自己負責的門市：也給一張卡片，點進去就能填訪店紀錄
+  const own = {}; stores.forEach(function (s) { own[s.store] = 1; });
+  const elsewhere = activeStores_().filter(function (s) { return !own[s.store]; });
+  const guest = elsewhere.filter(function (s) { return places.indexOf(s.store) >= 0; }).map(function (s) { const k = storeCard_(s, c, places); k.sup = s.supervisor ? nameOf_(s.supervisor) : ''; return k; });
+  const others = elsewhere.map(function (s) { return { store: s.store, sup: s.supervisor ? nameOf_(s.supervisor) : '' }; }).sort(function (a, b) { return a.sup.localeCompare(b.sup) || a.store.localeCompare(b.store); });
   const end = addDays_(c.wk, 6);
   const wv = c.visits.filter(function (v) { return v.who === who && v.date >= c.wk && v.date <= end; });
   return {
     who: { account: p.account, name: p.name }, today: c.today, asOf: c.M.asOf, metricsNote: c.M.note,
-    event: todayEv[0] ? eventView_(todayEv[0]) : null, cards: cards,
+    event: todayEv[0] ? eventView_(todayEv[0]) : null, cards: cards, guest: guest, others: others,
     week: { from: c.wk, to: end, site: wv.filter(function (v) { return v.mode === '現場'; }).length, remote: wv.filter(function (v) { return v.mode === '遠端'; }).length,
       nudges: wv.reduce(function (a, v) { return a + J_(v.nudges, []).length; }, 0), todos: wv.reduce(function (a, v) { return a + J_(v.todos, []).length; }, 0),
       camDone: cards.filter(function (x) { return x.cam.length === 3; }).length, stores: cards.length }
@@ -188,6 +193,11 @@ function findTodo_(id) {
   if (!t) fail_('找不到這筆待辦');
   return t;
 }
+/** 能不能對這筆待辦做事（催辦、補充、看照片）：督導連別人門市的也可以，因為他可能就是在那間店回報的。清單頁仍只列自己門市的（canSeeTodo_）。 */
+function canTouchTodo_(me, t) {
+  if (isSupervisor_(me)) return activeStores_().some(function (s) { return s.store === t.store; });
+  return canSeeTodo_(me, t);
+}
 function canSeeTodo_(me, t) {
   if (isDirector_(me)) return true;
   if (isSupervisor_(me)) return storesFor_(me).some(function (s) { return s.store === t.store; });
@@ -226,7 +236,7 @@ function todoAdd_(me, d) {
 }
 function todoNote_(me, d, isNudge) {
   const t = findTodo_(str_(d.id, 40));
-  if (!canSeeTodo_(me, t)) fail_('你沒有這筆待辦的權限', 'forbidden');
+  if (!canTouchTodo_(me, t)) fail_('你沒有這筆待辦的權限', 'forbidden');
   if (!isOpenTodo_(t)) fail_('這筆待辦已經結案');
   const text = isNudge ? '催辦' : str_(d.text, 500);
   if (!text) fail_('請輸入補充內容');
@@ -269,7 +279,7 @@ function photoGet_(me, d) {
     return { type: b.getContentType(), data: Utilities.base64Encode(b.getBytes()) };
   }
   const t = findTodo_(str_(d.id, 40));
-  if (!canSeeTodo_(me, t)) fail_('你沒有這筆待辦的權限', 'forbidden');
+  if (!canTouchTodo_(me, t)) fail_('你沒有這筆待辦的權限', 'forbidden');
   if (!t.photoId) fail_('這筆待辦沒有照片');
   const blob = DriveApp.getFileById(t.photoId).getBlob();
   return { type: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
@@ -527,7 +537,7 @@ function brief_(me) {
 function extCase_(me, id) {
   const t = allTodos_().filter(function (x) { return yes_(x.ext) && x.id === id; })[0];
   if (!t) fail_('找不到這個案件，可能已經在原系統結案');
-  if (!canSeeTodo_(me, t)) fail_('你沒有這個案件的權限', 'forbidden');
+  if (!canTouchTodo_(me, t)) fail_('你沒有這個案件的權限', 'forbidden');
   return t;
 }
 function extNote_(me, d) {

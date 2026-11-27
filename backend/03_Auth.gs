@@ -153,7 +153,8 @@ function storesFor_(me) {
   if (isSupervisor_(me)) return all.filter(function (s) { return s.supervisor === me.account; });
   return all;
 }
+/** 能不能打開這間門市的門市頁、填訪店紀錄、回報待辦。督導也可以進別人的門市（去別人的店巡訪要能留紀錄，2026-11-27 決定）。 */
 function assertStore_(me, store) {
-  const ok = storesFor_(me).some(function (s) { return s.store === store; });
+  const ok = activeStores_().some(function (s) { return s.store === store; });
   if (!ok) fail_('你沒有這間門市的權限', 'forbidden');
 }
