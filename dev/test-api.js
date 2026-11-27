@@ -348,6 +348,28 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = call('events.add', { type: '巡店', start: '2026-12-08', places: ['不存在的店'] }, jill); ok(!r.ok, '行程：全部不認得的店會被擋');
 }
 
+// --- 客訴紀錄表 ---
+{
+  const e4 = seed(load({ props: { COMPLAINT_SHEET_ID: 'COMPLAINT', COMPLAINT_GID: '0' } }), { sample: false });
+  const sh = e4.books.COMPLAINT.insertSheet('2026客訴');
+  sh.appendRow(['督導填寫', '', '', '', '直營填寫']);
+  sh.appendRow(['處理進度', '案號', '嚴重\n程度', '分類', '客訴是否成立', '門市', '負責\n督導', '月', '日期', '來源', '姓名', '連絡方式', '客訴類別', '客訴項目', '客訴內容 (簡要說明人、事、時、地、物)', '預定結案日\n (+3工作天)', '負責\n督導', '處理人員']);
+  sh.appendRow(['已結案', 1, '--', '加盟', '--', '台北信義', 'Jill', 11, '11/2', '來電', '王小明', '0900000001', '服務態度及應對', '服務態度', '店員態度不佳', '2026/11/5']);
+  sh.appendRow(['處理中', 2, '--', '加盟', '--', '信義', 'Jill', 11, '11/20', 'FB', '陳小美', '0900000002', '飲品風味與品質', '飲品做錯', '冰的做成熱的', '2026/11/25']);
+  sh.appendRow(['', 3, '--', '直營', '', '板橋府中店', 'Joyce', 11, new Date(Date.UTC(2026, 10, 23, 4)), 'GOOGLE評論', '林先生', '0900000003', '其他', '包材異常', '提袋斷裂', '']);
+  sh.appendRow(['處理中', 4, '--', '加盟', '--', '不存在分店', 'X', 8, '8/1', 'FB', '張', '0900000004', '其他', '其他', '很久以前', '']);
+  const c4b = (action, data, token) => JSON.parse(e4.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tj = c4b('login', { account: 'jill', password: 'ugdemo1234' }).data.token, tg = c4b('login', { account: 'gongwu', password: 'ugdemo1234' }).data.token;
+  r = c4b('todo.list', {}, tj);
+  const cs = r.ok ? r.data.todos.filter(t => t.source === '客訴') : [];
+  ok(cs.length === 1 && cs[0].id === 'C2026-2' && cs[0].store === '台北信義店' && cs[0].dept === '客服' && /飲品做錯：冰的做成熱的/.test(cs[0].text) && cs[0].createdAt === '2026-11-20' && /^https:\/\/docs\.google\.com\/spreadsheets\/d\/COMPLAINT/.test(cs[0].url), '客訴：未結案的列成待辦，簡寫店名對回主檔，督導拿得到連結', cs);
+  ok(!/陳小美|0900000002|王小明/.test(JSON.stringify(r)) && !/0900000002|陳小美/.test(JSON.stringify(e4.cache)), '客訴：顧客姓名與電話不進工作台');
+  r = c4b('store', { store: '台北信義店' }, tj); ok(r.ok && r.data.complaints && r.data.complaints.m === 2 && r.data.complaints.open === 1 && r.data.complaints.d90 === 2, '客訴：門市頁有本月／近 90 天／未結案件數', r.ok ? r.data.complaints : r);
+  r = c4b('todo.list', {}, tg); ok(r.ok && !r.data.todos.some(t => t.source === '客訴'), '客訴：部門窗口的待辦不會出現客訴');
+  r = c4b('todo.add', { store: '台北信義店', text: '客人抱怨', source: '客訴', force: true }, tj); ok(r.ok && r.data.todo && r.data.todo.source !== '客訴', '客訴：不能在工作台自己開客訴單', r);
+  r = c4b('ext.note', { id: 'C2026-2', text: '已致電顧客', help: true }, tj); ok(r.ok && r.data.todo.help, '客訴：可以補充說明並請營運經理協助', r);
+}
+
 // --- 去別人的店巡訪 ---
 {
   const e5 = seed(load({ props: { PHOTO_FOLDER_ID: 'PHOTOS' } }));

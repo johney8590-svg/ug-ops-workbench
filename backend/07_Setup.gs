@@ -180,6 +180,12 @@ function checkSetup() {
 
 /** 檢查三套既有系統的後台長什麼樣子：只印分頁名稱、表頭與各狀態的筆數，不印內容。 */
 function checkSources() {
+  if (prop_('COMPLAINT_SHEET_ID')) {
+    try {
+      const c = readComplaints_(prop_('COMPLAINT_SHEET_ID')), miss = Object.keys(c.miss);
+      console.log('客訴｜分頁「' + c.tab + '」共 ' + c.total + ' 筆，未結案 ' + c.open.length + ' 筆；店名對不上主檔的（' + miss.length + '）：' + miss.slice(0, 40).join('、'));
+    } catch (e) { console.log('客訴：讀取失敗 ' + e.message); }
+  } else console.log('客訴：尚未設定 COMPLAINT_SHEET_ID');
   [['修繕', 'REPAIR_SHEET_ID'], ['物料異常', 'ANOMALY_SHEET_ID'], ['文宣', 'PROMO_SHEET_ID']].forEach(function (x) {
     const id = prop_(x[1]);
     if (!id) { console.log(x[0] + '：尚未設定 ' + x[1]); return; }

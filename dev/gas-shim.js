@@ -31,7 +31,7 @@ function makeBook() {
 
 function load(opts) {
   opts = opts || {};
-  const books = { DATA: makeBook(), DASH: makeBook(), MASTER: makeBook(), REPAIR: makeBook(), ANOMALY: makeBook(), PROMO: makeBook() };
+  const books = { DATA: makeBook(), DASH: makeBook(), MASTER: makeBook(), REPAIR: makeBook(), ANOMALY: makeBook(), PROMO: makeBook(), COMPLAINT: makeBook() };
   const props = Object.assign({ DATA_SHEET_ID: 'DATA', DASHBOARD_SHEET_ID: 'DASH' }, opts.props || {});
   const cache = {}, files = {}, mails = [], folders = {}, fetches = [];
   const pad = n => ('0' + n).slice(-2);

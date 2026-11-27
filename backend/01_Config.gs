@@ -23,7 +23,7 @@ const TABS = {
 
 const ROLES = ['director', 'supervisor', 'dept'];
 const EVENT_TYPES = ['巡店', '外出', '訓練', '會議', '內勤', '請假'];
-const SOURCES = { '修繕': { dept: '工務', limit: 7 }, '物料異常': { dept: '採購', limit: 3 }, '文宣': { dept: '行銷', limit: 7 }, '其他': { dept: '營運後勤', limit: 7 } };
+const SOURCES = { '修繕': { dept: '工務', limit: 7 }, '物料異常': { dept: '採購', limit: 3 }, '文宣': { dept: '行銷', limit: 7 }, '客訴': { dept: '客服', limit: 5 }, '其他': { dept: '營運後勤', limit: 7 } };
 const SLOTS = {
   '開班':   ['煮茶機標定', '茶飲機開班潤洗', '茶飲機標定'],
   '營業中': ['每小時消毒作業', '均質秒數'],

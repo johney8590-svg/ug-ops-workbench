@@ -6,6 +6,7 @@
 const EXT_SYSTEMS = {
   '修繕':     { sys: '修繕系統',     front: 'https://johney8590-svg.github.io/ug-repair-web/',              adminProp: 'REPAIR_ADMIN_URL',  admin: '' },
   '物料異常': { sys: '物料異常系統', front: 'https://johney8590-svg.github.io/store-anomaly-report-web/',   adminProp: 'ANOMALY_ADMIN_URL', admin: 'https://johney8590-svg.github.io/store-anomaly-report-web/admin.html' },
+  '客訴':     { sys: '客訴紀錄表',   front: '', adminProp: '', admin: '' },
   '文宣':     { sys: '文宣申請系統', front: 'https://johney8590-svg.github.io/promo-apply-web/',            adminProp: 'PROMO_ADMIN_URL',   admin: 'https://johney8590-svg.github.io/promo-apply-web/admin.html' }
 };
 /**
@@ -15,6 +16,7 @@ const EXT_SYSTEMS = {
 let VIEWER_ = null;
 function extUrl_(t) {
   const x = EXT_SYSTEMS[t.source];
+  if (t.source === '客訴') return VIEWER_ && VIEWER_.role !== 'dept' ? complaintUrl_() : '';   // 客訴紀錄表是督導自己要填的，所以督導也拿得到連結
   if (!x || !VIEWER_ || VIEWER_.role === 'supervisor') return '';
   let u = prop_(x.adminProp) || x.admin;
   if (!/^https:\/\//.test(String(u))) return '';
@@ -77,22 +79,95 @@ function readExternal_() {
       push('文宣', r.caseNo, r.createdAt || r.applyDate, r.store, '', '文宣申請：' + promoItems_(r.items), name[st]);
     });
   });
+  safe('客訴紀錄表', 'COMPLAINT_SHEET_ID', function (id) {
+    const c = readComplaints_(id);
+    c.open.forEach(function (r) { push('客訴', r.id, r.date, r.store, '', r.text, r.status); });
+    try { CacheService.getScriptCache().put('ext:cstats', JSON.stringify(c.stats), 2700); } catch (e) { /* 忽略 */ }
+  });
   return out;
 }
 
+/**
+ * 客訴紀錄表（客服／行銷維護的試算表，只讀）。未結案的列成待辦（歸督導追），另外統計各門市本月與近 90 天件數。
+ * 個資最小化：顧客姓名、連絡方式兩欄完全不讀進工作台。
+ * 分頁：優先用「今年＋客訴」（例：2026客訴），找不到再用指令碼屬性 COMPLAINT_GID 指定的分頁。
+ */
+function complaintSheet_(id) {
+  const ss = SpreadsheetApp.openById(id), year = today_().slice(0, 4), gid = String(prop_('COMPLAINT_GID') || '');
+  return ss.getSheetByName(year + '客訴') || ss.getSheets().filter(function (s) { return String(s.getSheetId()) === gid; })[0] || null;
+}
+function complaintUrl_() {
+  const id = prop_('COMPLAINT_SHEET_ID');
+  return id ? 'https://docs.google.com/spreadsheets/d/' + id + '/edit' + (prop_('COMPLAINT_GID') ? '#gid=' + prop_('COMPLAINT_GID') : '') : '';
+}
+function readComplaints_(id) {
+  const out = { open: [], stats: {}, total: 0, tab: '', miss: {} }, res = storeResolver_();
+  const sh = complaintSheet_(id);
+  if (!sh || sh.getLastRow() < 2) return out;
+  out.tab = sh.getName();
+  const vals = sh.getDataRange().getValues(), strip = function (x) { return String(x == null ? '' : x).replace(/\s+/g, ''); };
+  let h = -1;
+  for (let i = 0; i < Math.min(8, vals.length); i++) { const r = vals[i].map(strip); if (r.some(function (x) { return x.indexOf('案號') >= 0; }) && r.some(function (x) { return x.indexOf('門市') >= 0; })) { h = i; break; } }
+  if (h < 0) throw new Error('找不到表頭（需要有「案號」與「門市」欄）');
+  const head = vals[h].map(strip), col = function (key, exact) { return head.map(function (x) { return exact ? x === key : x.indexOf(key) >= 0; }).indexOf(true); };
+  const I = { st: col('處理進度'), no: col('案號'), store: col('門市'), date: col('日期', true), src: col('來源'), cat: col('客訴類別'), item: col('客訴項目'), text: col('客訴內容'), ok: col('客訴是否成立') };
+  if (I.date < 0) I.date = col('日期');
+  const year = (out.tab.match(/\d{4}/) || [today_().slice(0, 4)])[0], today = today_(), ym = today.slice(0, 7), d90 = addDays_(today, -90);
+  const g = function (r, i) { return i >= 0 ? r[i] : ''; };
+  for (let i = h + 1; i < vals.length; i++) {
+    const r = vals[i], store = String(g(r, I.store)).trim(), no = String(g(r, I.no)).trim();
+    if (!store || !no) continue;
+    const dv = g(r, I.date);
+    let date = dv instanceof Date ? Utilities.formatDate(dv, TZ, 'yyyy-MM-dd') : normDate_(String(dv).trim(), year);
+    if (date && date.slice(0, 4) !== year && !(dv instanceof Date)) date = year + date.slice(4);
+    if (!date) continue;
+    out.total++;
+    const st = String(g(r, I.st)).trim(), key = res(store) || ('?' + store), s = out.stats[key] || (out.stats[key] = { m: 0, d90: 0, open: 0 });
+    if (key.charAt(0) === '?') out.miss[store] = 1;
+    if (date.slice(0, 7) === ym) s.m++;
+    if (date >= d90) s.d90++;
+    if (st.indexOf('結案') >= 0) continue;
+    s.open++;
+    out.open.push({ id: 'C' + year + '-' + no, date: date, store: store, status: st || '未結案',
+      text: [String(g(r, I.cat)).trim(), String(g(r, I.item)).trim()].filter(String).join('／') + '：' + String(g(r, I.text)).trim() });
+  }
+  return out;
+}
+/** 門市頁用：這間店本月、近 90 天的客訴件數（讀不到就不顯示）。 */
+function complaintStats_(store) {
+  if (!prop_('COMPLAINT_SHEET_ID')) return null;
+  const all = J_(CacheService.getScriptCache().get('ext:cstats'), null);
+  if (!all) return null;
+  const s = all[store];
+  return { m: s ? s.m : 0, d90: s ? s.d90 : 0, open: s ? s.open : 0, url: VIEWER_ && VIEWER_.role !== 'dept' ? complaintUrl_() : '' };
+}
+
+/**
+ * 把別的系統寫的店名對回主檔的店名：差一個「店」字或空白算同一間；
+ * 客訴表常用簡寫（例：「南西」「桃園藝文」），完全相同對不到時，找「結尾相同」且唯一的那一間。對不到回傳空字串。
+ */
+function storeResolver_() {
+  const byNorm = {}; activeStores_().forEach(function (s) { byNorm[normStore_(s.store)] = s.store; });
+  const norms = Object.keys(byNorm), memo = {};
+  return function (name) {
+    const k = normStore_(name);
+    if (memo[k] !== undefined) return memo[k];
+    let m = byNorm[k] || '';
+    if (!m && k.length >= 2) { const c = norms.filter(function (x) { return x.slice(-k.length) === k; }); if (c.length === 1) m = byNorm[c[0]]; }
+    return (memo[k] = m);
+  };
+}
 let extMemo_ = null;
 function externalTodos_() {
   if (extMemo_) return extMemo_;
-  if (!prop_('REPAIR_SHEET_ID') && !prop_('ANOMALY_SHEET_ID') && !prop_('PROMO_SHEET_ID')) return (extMemo_ = []);
+  if (!prop_('REPAIR_SHEET_ID') && !prop_('ANOMALY_SHEET_ID') && !prop_('PROMO_SHEET_ID') && !prop_('COMPLAINT_SHEET_ID')) return (extMemo_ = []);
   const cache = CacheService.getScriptCache();
   const hit = cache.get('ext:todos');
   let list = null;
   if (hit) { try { list = JSON.parse(hit); } catch (e) { list = null; } }
   if (!list) { list = readExternal_(); putExternal_(list); }
-  // 門市名稱對回主檔的寫法（差一個「店」字或空白也算同一間）
-  const byNorm = {};
-  activeStores_().forEach(function (s) { byNorm[normStore_(s.store)] = s.store; });
-  list.forEach(function (t) { const m = byNorm[normStore_(t.store)]; if (m) t.store = m; });
+  const res = storeResolver_();
+  list.forEach(function (t) { const m = res(t.store); if (m) t.store = m; });
   extMemo_ = list;
   return list;
 }

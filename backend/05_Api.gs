@@ -128,7 +128,7 @@ function store_(me, d) {
   const visits = c.visits.filter(function (v) { return v.store === name; }).sort(function (a, b) { return (b.date + b.time).localeCompare(a.date + a.time); }).slice(0, 8).map(visitView_);
   const lc = lastContact_(name, c.visits);
   return { store: name, zone: s.zone, supervisor: s.supervisor ? nameOf_(s.supervisor) : (s.supName || '未指定'), today: c.today, asOf: c.M.asOf, m: metricView_(mOf_(c.M, name)), qsc: qscOf_(name),
-    todos: todos, anomaly: c.anom.filter(function (t) { return t.store === name; }).map(function (t) { return todoView_(t, c.today); }), visits: visits, cam: camSlots_(name, c.wk, c.visits), last: lc ? { date: lc.date, mode: lc.mode } : null,
+    todos: todos, complaints: complaintStats_(name), anomaly: c.anom.filter(function (t) { return t.store === name; }).map(function (t) { return todoView_(t, c.today); }), visits: visits, cam: camSlots_(name, c.wk, c.visits), last: lc ? { date: lc.date, mode: lc.mode } : null,
     slots: SLOTS, slotRule: SLOT_RULE };
 }
 
@@ -210,7 +210,7 @@ function todoAdd_(me, d) {
   assertStore_(me, store);
   const text = str_(d.text, 500);
   if (!text) fail_('請用一句話說明狀況');
-  const source = SOURCES[d.source] ? d.source : guessSource_(text);
+  const source = SOURCES[d.source] && d.source !== '客訴' ? d.source : guessSource_(text);   // 客訴只從客訴紀錄表來，不能在工作台開
   const today = today_();
   const dupes = allTodos_().filter(function (t) { return t.store === store && t.source === source && isOpenTodo_(t) && todoDays_(t, today) <= DEDUPE_DAYS; });
   if (dupes.length && !d.force) return { dupes: dupes.map(function (t) { return todoView_(t, today); }), source: source, dept: SOURCES[source].dept };

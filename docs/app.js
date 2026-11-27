@@ -234,7 +234,7 @@
     var id = ' data-id="' + esc(t.id) + '"';
     if (t.ext) {                                      // 既有系統的單：這裡只看，處理要回原系統
       h += '<span class="chip">' + esc(t.sys) + '・' + esc(t.id) + '</span>';
-      if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">開啟' + esc(t.sys) + '後台</a>';
+      if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">開啟' + esc(t.sys) + (t.source === '客訴' ? '' : '後台') + '</a>';
       if (t.hasPhoto) h += '<button class="btn sm" data-act="t-photo"' + id + '>看照片</button>';
       h += '<button class="btn sm" data-act="x-note"' + id + '>' + (S.me.role === 'director' ? '加註' : '補充說明給營運經理') + '</button>';
       var open = t.notes.filter(function (n) { return n.help && !n.done; }).slice(-1)[0];
@@ -294,6 +294,8 @@
     h += '<div class="sec"><h2>本週遠端抽查</h2><span class="right">' + camDots(d.cam) + '</span></div>';
     if (d.qsc) h += '<div class="sec"><h2>QSC（iService）</h2></div><div class="card"><div class="row"><span class="title num">' + d.qsc.score + ' 分</span><span class="small muted">' + esc(md(d.qsc.date)) + '・' + esc(d.qsc.by) + '</span></div>' +
       (d.qsc.fails.length ? '<div class="small muted">上次未達標，這次順便確認：</div><div class="chips">' + d.qsc.fails.map(function (f) { return '<span class="chip warn">' + esc(f) + '</span>'; }).join('') + '</div>' : '') + '</div>';
+    if (d.complaints) h += '<div class="sec"><h2>客訴</h2>' + (/^https:\/\//.test(d.complaints.url) ? '<a class="btn sm right" target="_blank" rel="noopener noreferrer" href="' + esc(d.complaints.url) + '">開啟客訴紀錄表</a>' : '') + '</div>' +
+      '<div class="kpis"><div class="kpi"><div class="k">未結案</div><div class="v num' + (d.complaints.open ? ' down' : '') + '">' + d.complaints.open + '</div></div><div class="kpi"><div class="k">本月</div><div class="v num">' + d.complaints.m + '</div></div><div class="kpi"><div class="k">近 90 天</div><div class="v num">' + d.complaints.d90 + '</div></div></div>';
     h += '<div class="sec"><h2>待辦（' + d.todos.length + '）</h2><button class="btn sm right" data-act="report">＋ 拍照回報</button></div><div class="card">' +
       (d.todos.length ? d.todos.map(function (t) { return todoHtml(t, 'store'); }).join('') : '<div class="empty">沒有未結案的待辦</div>') + '</div>';
     if (d.anomaly && d.anomaly.length) h += '<div class="sec"><h2>本月物料異常通報（' + d.anomaly.length + '）</h2></div><div class="note">當月新增的只是通報，相關部門處理中，不算待辦；跨月還沒處理完才會列入逾期。</div><div class="card">' + d.anomaly.map(function (t) { return todoHtml(t, 'store'); }).join('') + '</div>';
