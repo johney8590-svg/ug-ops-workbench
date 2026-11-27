@@ -40,6 +40,7 @@ function metrics_() {
  */
 function warmCache() {
   const today = today_(), cache = CacheService.getScriptCache();
+  Object.keys(TABS).forEach(function (t) { if (t !== 'log') { try { Store.refresh(t); } catch (e) { console.error('分頁 ' + t + ' 重讀失敗：' + e.message); } } });
   const out = computeMetrics_(today);
   try { cache.put('metrics:' + today, JSON.stringify(out), 2700); } catch (e) { /* 忽略 */ }
   try { syncQsc_(); } catch (e) { console.error('QSC 同步失敗：' + e.message); }

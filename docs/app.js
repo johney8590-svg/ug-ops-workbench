@@ -4,7 +4,8 @@
 (function () {
   'use strict';
   var API = (window.UG_CONFIG && window.UG_CONFIG.API_URL) || '';
-  var KEY = 'ug-ops-token', MEKEY = 'ug-ops-me';
+  var KEY = 'ug-ops-token', MEKEY = 'ug-ops-me', CKEY = 'ug-ops-cache';
+  var READS = { me: 1, home: 1, store: 1, 'todo.list': 1, 'journal.get': 1, 'journal.board': 1, 'events.list': 1, 'posts.list': 1, board: 1, 'line.status': 1, brief: 1, batch: 1, 'photo.get': 1, 'cal.url': 1 };
   var C = {};                          // 上次拿到的畫面資料：切換分頁時先顯示，再背景更新
   var WD = ['日', '一', '二', '三', '四', '五', '六'];
   var S = { token: null, me: null, today: '', tab: '', as: '', home: null, sched: { from: '', scope: 'mine', mode: 'week', month: '' }, jweek: '', data: {} };
@@ -37,22 +38,63 @@
     return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action, token: S.token, data: data || {} }), redirect: 'follow', credentials: 'omit' })
       .then(function (r) { return r.json(); }, function () { throw new Error('連線失敗，請確認網路後再試'); })
       .then(function (j) {
-        if (j && j.ok) return j.data;
+        if (j && j.ok) { if (!READS[action]) Object.keys(C).forEach(function (k) { if (k.indexOf('store|') === 0) delete C[k]; }); return j.data; }
         var e = new Error((j && j.error) || '系統發生錯誤'); e.code = j && j.code;
         if (e.code === 'auth') { setToken(null); S.me = null; closeAllSheets(); renderLogin(); }
         if (e.code === 'must_change') renderMustChange();
         throw e;
       });
   }
-  function setToken(t) { S.token = t; if (!t) C = {}; try { if (t) localStorage.setItem(KEY, t); else { localStorage.removeItem(KEY); localStorage.removeItem(MEKEY); } } catch (e) { /* 忽略 */ } }
+  function setToken(t) { S.token = t; if (!t) C = {}; try { if (t) localStorage.setItem(KEY, t); else { localStorage.removeItem(KEY); localStorage.removeItem(MEKEY); localStorage.removeItem(CKEY); } } catch (e) { /* 忽略 */ } }
+  /* 上次的畫面資料留在這台裝置上：下次打開先顯示，再背景更新。登出或登入過期時清掉。 */
+  var saveT = null;
+  function saveCache() {
+    clearTimeout(saveT);
+    saveT = setTimeout(function () {
+      if (!S.token || !S.me) return;
+      try { var j = JSON.stringify({ a: S.me.account, at: Date.now(), as: S.as, C: C }); if (j.length < 1500000) localStorage.setItem(CKEY, j); else localStorage.removeItem(CKEY); } catch (e) { /* 存不下就算了 */ }
+    }, 400);
+  }
+  function loadCache(account) {
+    try { var o = JSON.parse(localStorage.getItem(CKEY) || 'null'); if (o && o.a === account && Date.now() - o.at < 7 * 864e5 && o.C) { C = o.C; if (o.as) S.as = o.as; } } catch (e) { /* 忽略 */ }
+  }
+  function keyOf(action, data) { return action + '|' + JSON.stringify(data || {}); }
+  /** 一次連線把其他分頁的資料先抓回來，之後切換分頁不用等。 */
+  function prefetch(calls) {
+    calls = calls.filter(function (c) { return !PF[keyOf(c.action, c.data)] || Date.now() - PF[keyOf(c.action, c.data)] > 120000; }).slice(0, 12);
+    if (!calls.length) return Promise.resolve();
+    calls.forEach(function (c) { PF[keyOf(c.action, c.data)] = Date.now(); });
+    return api('batch', { calls: calls }).then(function (rs) {
+      rs.forEach(function (r, i) { if (r && r.ok) C[keyOf(calls[i].action, calls[i].data)] = r.data; });
+      saveCache();
+      return rs;
+    }).catch(function () { calls.forEach(function (c) { delete PF[keyOf(c.action, c.data)]; }); });
+  }
+  var PF = {};
+  function prefetchTabs() {
+    var wk = { from: S.sched.from, to: addDays(S.sched.from, 6) }, calls = [{ action: 'todo.list', data: {} }, { action: 'events.list', data: wk }, { action: 'posts.list', data: {} }];
+    if (S.me.role === 'director') { calls.unshift({ action: 'board', data: {} }); calls.push({ action: 'journal.board', data: { week: S.jweek } }); if (S.as) calls.push({ action: 'home', data: { as: S.as } }); }
+    if (S.me.role === 'supervisor') calls.push({ action: 'journal.get', data: { week: S.jweek } });
+    calls = calls.filter(function (c) { return keyOf(c.action, c.data) !== S.firstKey; });
+    prefetch(calls).then(function () { if (S.me && S.me.role === 'director' && !C[keyOf('home', { as: S.as })] && S.as) prefetch([{ action: 'home', data: { as: S.as } }]); });
+  }
+  function prefetchStores(cards) {
+    var names = (cards || []).map(function (c) { return c.store; }).filter(function (n) { return !C[keyOf('store', { store: n })]; }).slice(0, 24);
+    (function next() { if (!names.length) return; prefetch(names.splice(0, 8).map(function (n) { return { action: 'store', data: { store: n } }; })).then(next); })();
+  }
   function nowTaipei() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
   /** 先用上次的資料把畫面畫出來，同時向伺服器要最新的，回來再更新一次。 */
   function swr(action, data, render) {
-    var tab = S.tab, k = action + '|' + JSON.stringify(data || {});
+    var tab = S.tab, k = keyOf(action, data);
+    if (!S.firstKey) S.firstKey = k;
     if (C[k]) render(C[k]); else loading();
-    return api(action, data).then(function (d) { C[k] = d; if (d && d.today) S.today = d.today; if (S.tab === tab && !stack.length) render(d); else if (S.tab === tab) S.dirty = true; })
-      .catch(function (e) { if (!C[k]) failView(e); });
+    PF[k] = Date.now();
+    sync(1);
+    return api(action, data).then(function (d) { sync(-1); var same = C[k] && JSON.stringify(C[k]) === JSON.stringify(d); C[k] = d; saveCache(); if (same) { if (d && d.today) S.today = d.today; return; } if (d && d.today) S.today = d.today; if (S.tab === tab && !stack.length) render(d); else if (S.tab === tab) S.dirty = true; })
+      .catch(function (e) { sync(-1); if (!C[k]) failView(e); });
   }
+  var syncN = 0;
+  function sync(n) { syncN = Math.max(0, syncN + n); document.documentElement.classList.toggle('syncing', syncN > 0); }
   function oops(e) { toast(e && e.message ? e.message : '發生錯誤'); }
   function busy(btn, p) { if (btn) btn.disabled = true; return p.then(function (v) { if (btn) btn.disabled = false; return v; }, function (e) { if (btn) btn.disabled = false; throw e; }); }
 
@@ -93,7 +135,7 @@
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(MEKEY) || 'null'); } catch (e) { saved = null; }
     var started = false;
-    if (saved && saved.account && !saved.mustChange) { S.me = saved; S.today = nowTaipei(); started = true; start(); }
+    if (saved && saved.account && !saved.mustChange) { S.me = saved; S.today = nowTaipei(); loadCache(saved.account); started = true; start(); }
     else app.innerHTML = '<div class="empty">載入中…</div>';
     api('me').then(function (d) {
       var changed = !S.me || S.me.role !== d.me.role || S.me.dept !== d.me.dept || S.me.name !== d.me.name;
@@ -114,7 +156,9 @@
     app.innerHTML = '<header class="top"><div class="wrap top-row"><div class="mark">UG</div><h1>營運工作台</h1><button class="who" data-act="account">' + esc(S.me.name) + '</button></div></header>' +
       '<main class="wrap" id="view"></main><nav class="tabs" aria-label="主選單"><div class="wrap">' +
       tabs.map(function (t) { return '<button data-act="tab" data-tab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div></nav>';
+    S.firstKey = ''; PF = {};
     go(tabs[0][0]);
+    setTimeout(prefetchTabs, 50);
   }
   function go(tab) {
     S.tab = tab;
@@ -156,7 +200,7 @@
       loading();
       return api('brief').then(function (b) { C['brief|{}'] = b; S.data.sups = b.supervisors; if (b.supervisors.length) { S.as = b.supervisors[0].account; loadHome(); } else view().innerHTML = '<div class="empty">還沒有督導帳號</div>'; }).catch(failView);
     }
-    swr('home', S.me.role === 'director' ? { as: S.as } : {}, function (d) { S.home = d; renderHome(); });
+    swr('home', S.me.role === 'director' ? { as: S.as } : {}, function (d) { S.home = d; renderHome(); prefetchStores(d.cards); });
   }
 
   /* ---------- 門市頁 ---------- */
@@ -167,13 +211,17 @@
     reloadStore();
   }
   function reloadStore() {
-    var sp = SP;
+    var sp = SP, k = keyOf('store', { store: sp.store }), had = C[k];
+    var show = function (d) { sp.d = d; if (!sp.slot) sp.slot = ['開班', '營業中', '閉店'].filter(function (x) { return d.cam.indexOf(x) < 0; })[0] || '開班'; renderStore(); };
+    if (had) show(had);
     return api('store', { store: sp.store }).then(function (d) {
+      C[k] = d; saveCache();
       if (SP !== sp) return;
+      if (had && JSON.stringify(had) === JSON.stringify(d)) return;   // 沒變就不重畫，避免打字到一半畫面跳動
       sp.d = d;
       if (!sp.slot) sp.slot = ['開班', '營業中', '閉店'].filter(function (k) { return d.cam.indexOf(k) < 0; })[0] || '開班';
       renderStore();
-    }).catch(function (e) { if (SP === sp) sp.body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    }).catch(function (e) { if (SP === sp && !had) sp.body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
   }
   function todoHtml(t, ctx) {
     var h = '<div class="item"><div class="row"><b>' + (ctx === 'list' ? esc(t.store) + '・' : '') + esc(t.text) + '</b></div>' +

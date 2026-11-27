@@ -3,22 +3,22 @@
  * 行事曆訂閱用 GET ?cal=<個人訂閱碼>，只回傳該員自己的行程。
  */
 const ACTIONS = {
-  'me':            { fn: function (me) { return { me: publicPerson_(me), today: today_() }; } },
+  'me':            { fn: function (me) { return { me: publicPerson_(me), today: today_() }; }, read: true },
   'password.change': { fn: changePassword_, open: true },
-  'home':          { fn: home_ },
-  'store':         { fn: store_ },
+  'home':          { fn: home_, read: true },
+  'store':         { fn: store_, read: true },
   'visit.add':     { fn: visitAdd_ },
   'todo.add':      { fn: todoAdd_ },
   'todo.append':   { fn: function (me, d) { return todoNote_(me, d, false); } },
   'todo.nudge':    { fn: function (me, d) { return todoNote_(me, d, true); } },
   'todo.status':   { fn: todoStatus_ },
-  'todo.list':     { fn: todoList_ },
+  'todo.list':     { fn: todoList_, read: true },
   'photo.get':     { fn: photoGet_ },
-  'journal.get':   { fn: journalGet_ },
+  'journal.get':   { fn: journalGet_, read: true },
   'journal.save':  { fn: journalSave_ },
-  'journal.board': { fn: journalBoard_ },
+  'journal.board': { fn: journalBoard_, read: true },
   'journal.ack':   { fn: journalAck_ },
-  'events.list':   { fn: eventsList_ },
+  'events.list':   { fn: eventsList_, read: true },
   'events.add':    { fn: eventsAdd_ },
   'events.update': { fn: eventsUpdate_ },
   'events.delete': { fn: eventsDelete_ },
@@ -26,15 +26,15 @@ const ACTIONS = {
   'cal.reset':     { fn: calReset_ },
   'ext.note':      { fn: extNote_ },
   'ext.resolve':   { fn: extResolve_ },
-  'posts.list':    { fn: postsList_ },
+  'posts.list':    { fn: postsList_, read: true },
   'post.add':      { fn: postAdd_ },
   'post.decide':   { fn: postDecide_ },
   'post.ack':      { fn: postAck_ },
-  'board':         { fn: board_ },
-  'line.status':   { fn: lineStatus_ },
+  'board':         { fn: board_, read: true },
+  'line.status':   { fn: lineStatus_, read: true },
   'line.code':     { fn: lineCode_ },
   'line.unbind':   { fn: lineUnbind_ },
-  'brief':         { fn: brief_ }
+  'brief':         { fn: brief_, read: true }
 };
 
 function route_(req) {
@@ -44,6 +44,16 @@ function route_(req) {
   if (action === 'logout') return logout_(req.token);
   const me = auth_(req.token);
   VIEWER_ = me;
+  // 一次要好幾個畫面的資料（只限查詢類），省掉來回連線的時間；其中一個失敗不影響其他
+  if (action === 'batch') {
+    if (yes_(me.mustChange)) fail_('請先變更初始密碼', 'must_change');
+    return (Array.isArray(d.calls) ? d.calls : []).slice(0, 12).map(function (c) {
+      const x = c && Object.prototype.hasOwnProperty.call(ACTIONS, String(c.action)) ? ACTIONS[String(c.action)] : null;
+      if (!x || !x.read) return { ok: false, error: '不支援的操作', code: 'bad_request' };
+      try { return { ok: true, data: x.fn(me, c.data && typeof c.data === 'object' ? c.data : {}) }; }
+      catch (err) { if (err && err.code) return { ok: false, error: err.message, code: err.code }; console.error(err && err.stack ? err.stack : err); return { ok: false, error: '系統發生錯誤，請稍後再試', code: 'server' }; }
+    });
+  }
   const a = Object.prototype.hasOwnProperty.call(ACTIONS, action) ? ACTIONS[action] : null;
   if (!a) fail_('不支援的操作');
   // 還沒改掉初始密碼的人，只能查自己和改密碼

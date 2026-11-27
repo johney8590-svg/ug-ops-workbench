@@ -334,6 +334,24 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c9('line.unbind', {}, tr); ok(r.ok && !bound().length, 'LINE：可以解除綁定');
 }
 
+// --- 速度：一次查多個畫面、暫存 ---
+{
+  r = call('batch', { calls: [{ action: 'todo.list', data: {} }, { action: 'todo.add', data: { store: '台北信義店', text: 'x' } }, { action: 'board', data: {} }, { action: 'posts.list', data: {} }] }, jill);
+  ok(r.ok && r.data.length === 4 && r.data[0].ok && !r.data[1].ok && !r.data[2].ok && r.data[2].code === 'forbidden' && r.data[3].ok, '批次查詢：只收查詢類，權限照舊，互不影響', r.ok ? r.data.map(x => x.ok + ':' + (x.code || '')) : r);
+  r = call('batch', { calls: [] }, 'bogus'); ok(!r.ok && r.code === 'auth', '批次查詢：一樣要登入');
+  const e8 = seed(load(), { sample: false });
+  const big = e8.books.DATA._sheets.visits;
+  for (let i = 0; i < 900; i++) e8.gas.Store.append('visits', { id: 'V' + i, date: '2026-11-01', who: 'jill', store: '台北信義店', mode: '遠端', note: '測試備註內容'.repeat(12) });
+  const n1 = e8.gas.Store.rows('visits').length; e8.gas.Store.reset;
+  const chunks = Object.keys(e8.cache).filter(k => /^tab:visits:\d+$/.test(k)).length;
+  const e8b = e8.gas.Store; const before = big._rows.length;
+  ok(n1 >= 900 && chunks >= 2 && /^#\d+$/.test(e8.cache['tab:visits']), '暫存：大的分頁會切段存', { n1, chunks });
+  e8.gas.Store.append('visits', { id: 'VX', date: '2026-11-02', who: 'jill', store: '台北信義店', mode: '遠端' });
+  ok(!('tab:visits' in e8.cache) && e8.gas.Store.rows('visits').some(v => v.id === 'VX'), '暫存：寫入後立刻清掉並讀到新資料');
+  big.appendRow(['VM', '2026-11-03']); ok(!e8.gas.Store.rows('visits').some(v => v.id === 'VM'), '暫存：手動改試算表不會立刻生效');
+  e8.gas.warmCache(); ok(e8.gas.Store.rows('visits').some(v => v.id === 'VM'), '暫存：排程重讀後生效');
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

@@ -36,18 +36,49 @@ const Store = (function () {
 
   /**
    * 讀出整個分頁，每列是一個物件，_row 是試算表列號。
-   * 為了速度，讀過的分頁會暫存 5 分鐘；任何經由程式的寫入都會立刻清掉暫存。
-   * （直接在試算表上手動改資料，最慢 5 分鐘後生效。）
+   * 為了速度，讀過的分頁會暫存 1 小時，排程每 30 分鐘重讀一次；任何經由程式的寫入都會立刻清掉暫存。
+   * （直接在試算表上手動改資料，最慢 30 分鐘後生效；從編輯器執行 setup / checkSetup 會立刻重讀。）
+   * 一次請求只跟暫存區要一次資料（getAll），大的分頁切成小段存。
    */
-  const keys = {};
+  const keys = {}, TTL = 3600, CHUNK = 30000, MAXCHUNK = 30;
+  let pre = null;
   function sc() { return CacheService.getScriptCache(); }
+  function pull(list) { try { return sc().getAll(list) || {}; } catch (e) { return {}; } }
+  function cget(tab) {
+    if (!pre) pre = pull(Object.keys(TABS).filter(function (t) { return t !== 'log'; }).map(function (t) { return 'tab:' + t; }));
+    let v = pre['tab:' + tab];
+    if (v === undefined && tab === 'log') v = sc().get('tab:log');
+    if (!v) return null;
+    if (v.charAt(0) !== '#') return v;
+    const n = +v.slice(1), list = [];
+    for (let i = 0; i < n; i++) list.push('tab:' + tab + ':' + i);
+    const parts = pull(list);
+    let out = '';
+    for (let i = 0; i < n; i++) { if (!parts[list[i]]) return null; out += parts[list[i]]; }
+    return out;
+  }
+  function cput(tab, json) {
+    try {
+      if (json.length <= CHUNK) sc().put('tab:' + tab, json, TTL);
+      else {
+        const n = Math.ceil(json.length / CHUNK);
+        if (n > MAXCHUNK) return;
+        const o = {};
+        for (let i = 0; i < n; i++) o['tab:' + tab + ':' + i] = json.slice(i * CHUNK, (i + 1) * CHUNK);
+        sc().putAll(o, TTL);
+        sc().put('tab:' + tab, '#' + n, TTL);
+      }
+    } catch (e) { /* 存不進去就不暫存 */ }
+  }
   function remember(tab, out) { const k = {}; out.forEach(function (o) { k[o._row] = o.__k; delete o.__k; }); keys[tab] = k; }
-  function rows(tab) {
-    if (cache[tab]) return cache[tab];
+  function rows(tab, force) {
+    if (cache[tab] && !force) return cache[tab];
     let out = null;
-    const hit = sc().get('tab:' + tab);
+    const hit = force ? null : cget(tab);
     if (hit) { try { out = JSON.parse(hit); } catch (e) { out = null; } }
     if (!out) {
+      // 版本記號：讀試算表的這段時間如果有人寫入，就不把這份（可能已經過時的）資料放進暫存
+      const g0 = sc().get('gen:' + tab);
       const vals = sheet(tab).getDataRange().getValues();
       const h = vals[0].map(String);
       out = [];
@@ -58,13 +89,18 @@ const Store = (function () {
         out.push(o);
       }
       const json = JSON.stringify(out);
-      if (json.length < 95000) { try { sc().put('tab:' + tab, json, 300); } catch (e) { /* 太大就不暫存 */ } }
+      if (sc().get('gen:' + tab) === g0) cput(tab, json);
     }
     remember(tab, out);
     cache[tab] = out;
     return out;
   }
-  function invalidate(tab) { delete cache[tab]; delete keys[tab]; try { sc().remove('tab:' + tab); } catch (e) { /* 忽略 */ } }
+  function invalidate(tab) {
+    delete cache[tab]; delete keys[tab]; if (pre) delete pre['tab:' + tab];
+    try { sc().put('gen:' + tab, String(Date.now()) + Math.random(), TTL * 2); sc().remove('tab:' + tab); } catch (e) { /* 忽略 */ }
+  }
+  /** 排程用：重新從試算表讀一次並更新暫存（手動改的資料靠這個生效）。 */
+  function refresh(tab) { delete cache[tab]; rows(tab, true); }
   /** 暫存的列號可能因為有人手動刪列而對不上：寫入前先核對第一欄，對不上就請使用者重試，絕不寫錯列。 */
   function guard(tab, row, actual) {
     const k = keys[tab];
@@ -86,9 +122,9 @@ const Store = (function () {
     invalidate(tab);
   }
   function remove(tab, row) { const sh = sheet(tab); guard(tab, row, sh.getRange(row, 1, 1, 1).getValues()[0][0]); sh.deleteRow(row); invalidate(tab); }
-  function reset() { Object.keys(TABS).forEach(invalidate); book = null; }
+  function reset() { Object.keys(TABS).forEach(invalidate); book = null; pre = null; }
 
-  return { rows: rows, append: append, update: update, remove: remove, ss: ss, reset: reset };
+  return { rows: rows, append: append, update: update, remove: remove, ss: ss, reset: reset, refresh: refresh };
 })();
 
 /** 寫入類操作一律包在鎖裡，避免兩個人同時寫入互相覆蓋。 */

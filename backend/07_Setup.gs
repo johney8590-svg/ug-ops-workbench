@@ -42,6 +42,7 @@ function setup() {
 
 /** 從營運儀表板的資料分頁帶入門市與區域；已存在的門市不會被覆蓋。督導欄請手動填上督導的帳號。 */
 function importStores() {
+  Store.reset();   // 從編輯器執行時一律重讀試算表，不用暫存
   const id = prop_('DASHBOARD_SHEET_ID');
   if (!id) throw new Error('請先設定指令碼屬性 DASHBOARD_SHEET_ID');
   const sh = SpreadsheetApp.openById(id).getSheetByName(prop_('DASHBOARD_TAB') || 'data');
@@ -84,6 +85,7 @@ function handout_(rows) {
 
 /** 幫 people 分頁裡還沒有密碼的帳號產生隨機初始密碼，寫到「初始密碼」分頁。發給同仁後請把該分頁刪除。 */
 function issuePasswords() {
+  Store.reset();   // 從編輯器執行時一律重讀試算表，不用暫存
   const out = [];
   withLock_(function () {
     const todo = Store.rows('people').filter(function (p) { return p.account && !p.pwHash; });
@@ -104,6 +106,7 @@ function issuePasswords() {
 }
 
 function resetPassword(account) {
+  Store.reset();
   const p = person_(String(account || '').trim().toLowerCase());
   if (!p) throw new Error('找不到帳號');
   const pw = randomPassword_();
@@ -120,6 +123,7 @@ function clearMetricsCache() { CacheService.getScriptCache().remove('metrics:' +
 
 /** 自我檢查：在編輯器執行後看「執行記錄」。只印數量與對不上的名稱，不印任何密碼。 */
 function checkSetup() {
+  Store.reset();   // 從編輯器執行時一律重讀試算表，不用暫存
   const M = computeMetrics_(today_());
   console.log('營收資料：' + (M.asOf ? '更新到 ' + M.asOf + '，共 ' + Object.keys(M.stores).length + ' 間門市' : '讀不到（' + M.note + '）'));
   if (!M.asOf) {
