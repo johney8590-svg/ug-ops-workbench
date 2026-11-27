@@ -9,7 +9,7 @@ const EXT_SYSTEMS = {
   '文宣':     { sys: '文宣申請系統', front: 'https://johney8590-svg.github.io/promo-apply-web/',            adminProp: 'PROMO_ADMIN_URL',   admin: 'https://johney8590-svg.github.io/promo-apply-web/admin.html' }
 };
 /**
- * 連回原系統的網址。總監與處理單位拿到「管理用」網址；督導拿不到（督導不處理案件，管理網址也不該外流）。
+ * 連回原系統的網址。營運經理與處理單位拿到「管理用」網址；督導拿不到（督導不處理案件，管理網址也不該外流）。
  * 修繕系統的管理網址帶有管理金鑰，所以不寫在程式裡，請放在指令碼屬性 REPAIR_ADMIN_URL。
  */
 let VIEWER_ = null;

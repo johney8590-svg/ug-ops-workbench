@@ -118,7 +118,7 @@
       '<label class="f">密碼<input type="password" id="lg-p" autocomplete="current-password"></label>' +
       (msg ? '<div class="note bad">' + esc(msg) + '</div>' : '') +
       '<div class="btns"><button class="btn primary block" data-act="login">登入</button></div>' +
-      '<p class="muted small note">忘記密碼請找營運總監重設。請不要把密碼告訴別人，也不要在共用的手機上登入。</p></div>';
+      '<p class="muted small note">忘記密碼請找營運經理重設。請不要把密碼告訴別人，也不要在共用的手機上登入。</p></div>';
   }
   function renderMustChange() {
     closeAllSheets();
@@ -187,7 +187,7 @@
     h += '<div class="kpis"><div class="kpi"><div class="k">本週現場</div><div class="v num">' + w.site + '</div></div><div class="kpi"><div class="k">本週遠端</div><div class="v num">' + w.remote + '</div></div>' +
       '<div class="kpi"><div class="k">抽查完成</div><div class="v num">' + w.camDone + '<span class="s"> / ' + w.stores + ' 店</span></div></div><div class="kpi"><div class="k">催辦・回報</div><div class="v num">' + (w.nudges + w.todos) + '</div></div></div>';
     h += '<div class="sec"><h2>門市（需要處理的排前面）</h2></div>';
-    if (!cards.length) h += '<div class="empty">還沒有分配門市。請營運總監在 stores 分頁填上負責督導。</div>';
+    if (!cards.length) h += '<div class="empty">還沒有分配門市。請營運經理在 stores 分頁填上負責督導。</div>';
     cards.forEach(function (c) {
       h += '<button class="card" data-act="store" data-store="' + esc(c.store) + '" data-today="' + (c.today ? 1 : 0) + '"><div class="row"><span class="title">' + esc(c.store) + '</span>' + (c.today ? '<span class="chip today">今日行程</span>' : '') + '</div>' +
         '<div class="row">' + metricLine(c.m) + '</div><div class="row">' + camDots(c.cam) + '</div>' +
@@ -226,14 +226,14 @@
   function todoHtml(t, ctx) {
     var h = '<div class="item"><div class="row"><b>' + (ctx === 'list' ? esc(t.store) + '・' : '') + esc(t.text) + '</b></div>' +
       '<div class="chips"><span class="chip">' + esc(t.source) + ' → ' + esc(t.dept) + '</span><span class="chip">' + esc(t.status) + '</span><span class="chip ' + (t.late ? 'bad' : '') + '">' + (t.late ? '逾期・' : '') + '已 ' + t.days + ' 天</span>' + (t.hasPhoto ? '<span class="chip">有照片</span>' : '') + '</div>';
-    if (t.notes.length) h += '<div class="small muted pre">' + t.notes.slice(-4).map(function (n) { return esc(n.at.slice(5, 16)) + ' ' + esc(n.by) + '：' + (n.help ? (n.done ? '【已協助】' : '【請總監協助】') : '') + esc(n.text) + (n.reply ? '\n　↳ 總監回覆：' + esc(n.reply) : ''); }).join('\n') + '</div>';
+    if (t.notes.length) h += '<div class="small muted pre">' + t.notes.slice(-4).map(function (n) { return esc(n.at.slice(5, 16)) + ' ' + esc(n.by) + '：' + (n.help ? (n.done ? '【已協助】' : '【請營運經理協助】') : '') + esc(n.text) + (n.reply ? '\n　↳ 營運經理回覆：' + esc(n.reply) : ''); }).join('\n') + '</div>';
     h += '<div class="btns">';
     var id = ' data-id="' + esc(t.id) + '"';
     if (t.ext) {                                      // 既有系統的單：這裡只看，處理要回原系統
       h += '<span class="chip">' + esc(t.sys) + '・' + esc(t.id) + '</span>';
       if (/^https:\/\//.test(t.url)) h += '<a class="btn sm" target="_blank" rel="noopener noreferrer" href="' + esc(t.url) + '">開啟' + esc(t.sys) + '後台</a>';
       if (t.hasPhoto) h += '<button class="btn sm" data-act="t-photo"' + id + '>看照片</button>';
-      h += '<button class="btn sm" data-act="x-note"' + id + '>' + (S.me.role === 'director' ? '加註' : '補充說明給總監') + '</button>';
+      h += '<button class="btn sm" data-act="x-note"' + id + '>' + (S.me.role === 'director' ? '加註' : '補充說明給營運經理') + '</button>';
       var open = t.notes.filter(function (n) { return n.help && !n.done; }).slice(-1)[0];
       if (open && S.me.role === 'director') h += '<button class="btn sm primary" data-act="x-resolve" data-note="' + esc(open.noteId) + '">回覆並標為已協助</button>';
       return h + '</div></div>';
@@ -503,10 +503,10 @@
       S.data.journal = d;
       var s = d.saved, v = s || d.draft, sent = s && s.state === '已送出';
       var ta = function (k, label, ph) { return '<label class="f">' + label + '<textarea data-j="' + k + '" maxlength="4000" placeholder="' + esc(ph) + '">' + esc(v[k]) + '</textarea></label>'; };
-      view().innerHTML = weekNav() + (sent ? '<div class="note good">已於 ' + esc(s.sentAt.slice(5, 16)) + ' 送出' + (s.readAt ? '，總監已讀' : '') + '</div>' : '<div class="note">' + (s ? '草稿已儲存。' : '以下由本週 ' + d.draft.n + ' 筆訪店紀錄自動整理，確認、補充後送出即可。') + '請在 ' + esc(mdw(d.due)) + ' 前送出。</div>') +
-        (s && s.reply ? '<div class="sec"><h2>總監回覆</h2></div><div class="card pre">' + esc(s.reply) + '</div>' : '') + autoBlock(d) +
+      view().innerHTML = weekNav() + (sent ? '<div class="note good">已於 ' + esc(s.sentAt.slice(5, 16)) + ' 送出' + (s.readAt ? '，營運經理已讀' : '') + '</div>' : '<div class="note">' + (s ? '草稿已儲存。' : '以下由本週 ' + d.draft.n + ' 筆訪店紀錄自動整理，確認、補充後送出即可。') + '請在 ' + esc(mdw(d.due)) + ' 前送出。</div>') +
+        (s && s.reply ? '<div class="sec"><h2>營運經理回覆</h2></div><div class="card pre">' + esc(s.reply) + '</div>' : '') + autoBlock(d) +
         '<div class="sec"><h2>我的補充</h2><button class="btn sm right" data-act="j-refill">重新帶入紀錄</button></div><div class="card">' +
-        ta('found', '本週重點發現', '門市狀況、異常、店家反饋') + ta('issue', '處理中的事項', '已回報、已催辦的事') + ta('plan', '下週計畫', '預計巡哪些店、要追什麼') + ta('needs', '需要總監或其他部門協助（選填）', '') +
+        ta('found', '本週重點發現', '門市狀況、異常、店家反饋') + ta('issue', '處理中的事項', '已回報、已催辦的事') + ta('plan', '下週計畫', '預計巡哪些店、要追什麼') + ta('needs', '需要營運經理或其他部門協助（選填）', '') +
         '<div class="btns"><button class="btn grow" data-act="j-save">存草稿</button><button class="btn primary grow" data-act="j-send">' + (sent ? '更新並重新送出' : '送出週誌') + '</button></div></div>';
     }).catch(failView);
   }
@@ -524,7 +524,7 @@
     }).catch(function (e) { body.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
   }
 
-  /* ---------- 總監晨報 ---------- */
+  /* ---------- 營運經理晨報 ---------- */
   function loadBoard() {
     swr('board', {}, function (d) {
       var h = seg('bmode', [['brief', '晨報'], ['board', '工作看板']], 'board') + '<div class="sec"><h2>各部門手上的事</h2><span class="small muted right">含三套原系統未結案的單</span></div><div class="card">' +
@@ -609,7 +609,7 @@
       api('line.status').then(function (r) {
         if (!r.enabled || !box.isConnected) return;
         box.innerHTML = '<div class="sec"><h2>LINE 通知</h2></div>' + (r.bound ? '<div class="note good">已綁定，通知會傳到你的 LINE。</div><div class="btns"><button class="btn block" data-act="line-unbind">解除綁定</button></div>'
-          : '<div class="note">綁定後，催辦、公告、總監回覆會直接傳到你的 LINE。</div><div class="btns"><button class="btn primary block" data-act="line-code">取得綁定碼</button></div>');
+          : '<div class="note">綁定後，催辦、公告、營運經理回覆會直接傳到你的 LINE。</div><div class="btns"><button class="btn primary block" data-act="line-code">取得綁定碼</button></div>');
       }).catch(function () {});
     },
     logout: function () { api('logout').catch(function () {}).then(function () { setToken(null); S.me = null; S.home = null; S.data = {}; S.as = ''; closeAllSheets(); renderLogin(); }); },
@@ -672,7 +672,7 @@
         '<label class="f">標題<input type="text" id="pn-title" maxlength="80" placeholder="例：冬季新品 SOP v2"></label>' +
         '<label class="f">這次改了什麼（選填）<textarea id="pn-body" maxlength="3000"></textarea></label>' +
         '<label class="f">檔案連結（選填，雲端硬碟的分享連結）<input type="text" id="pn-url" maxlength="500" placeholder="https://"></label>' +
-        '<div class="note">' + (dir ? '你可以直接公告，或先存成待核定。' : '送出後要等營運總監核定才會公告。') + '</div>' +
+        '<div class="note">' + (dir ? '你可以直接公告，或先存成待核定。' : '送出後要等營運經理核定才會公告。') + '</div>' +
         '<div class="btns">' + (dir ? '<button class="btn primary grow" data-act="p-add" data-publish="1">直接公告</button><button class="btn grow" data-act="p-add">存成待核定</button>' : '<button class="btn primary block" data-act="p-add">送出待核定</button>') + '</div>');
     },
     'p-add': function (b) {
@@ -687,14 +687,14 @@
     },
     'p-ack': function (b) { busy(b, api('post.ack', { id: b.dataset.id })).then(function () { toast('已確認'); loadPosts(); }).catch(oops); },
     'x-note': function (b) {
-      openSheet('補充說明', '<p class="muted small">寫下這個案件的實際狀況。內容只存在工作台，總監看得到，不會寫回原系統。</p><label class="f">實際狀況<textarea id="xn-text" maxlength="800" placeholder="例：廠商已來看過兩次仍未修好，門市用備用機撐著"></textarea></label>' +
-        (S.me.role === 'director' ? '' : '<div class="pick"><label><input type="checkbox" id="xn-help">需要總監協助跨部門溝通</label></div>') +
+      openSheet('補充說明', '<p class="muted small">寫下這個案件的實際狀況。內容只存在工作台，營運經理看得到，不會寫回原系統。</p><label class="f">實際狀況<textarea id="xn-text" maxlength="800" placeholder="例：廠商已來看過兩次仍未修好，門市用備用機撐著"></textarea></label>' +
+        (S.me.role === 'director' ? '' : '<div class="pick"><label><input type="checkbox" id="xn-help">需要營運經理協助跨部門溝通</label></div>') +
         '<div class="btns"><button class="btn primary block" data-act="x-note-send" data-id="' + esc(b.dataset.id) + '">送出</button></div>');
     },
     'x-note-send': function (b) {
       var body = topBody(), text = body.querySelector('#xn-text').value.trim(), help = body.querySelector('#xn-help');
       if (!text) return toast('請寫下實際狀況');
-      busy(b, api('ext.note', { id: b.dataset.id, text: text, help: !!(help && help.checked) })).then(function () { closeSheet(); toast(help && help.checked ? '已送出，會出現在總監的晨報' : '已送出'); afterTodo(); }).catch(oops);
+      busy(b, api('ext.note', { id: b.dataset.id, text: text, help: !!(help && help.checked) })).then(function () { closeSheet(); toast(help && help.checked ? '已送出，會出現在營運經理的晨報' : '已送出'); afterTodo(); }).catch(oops);
     },
     'x-resolve': function (b) {
       openSheet('回覆協助請求', '<label class="f">回覆（選填）<textarea id="xr-text" maxlength="800" placeholder="例：已跟採購主管確認，週四前到貨"></textarea></label><div class="btns"><button class="btn primary block" data-act="x-resolve-send" data-note="' + esc(b.dataset.note) + '">標為已協助</button></div>');

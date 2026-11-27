@@ -31,7 +31,7 @@ ok(card('台北信義店').m.yTarget > 0 && card('台北信義店').m.monthTarge
 r = call('home', {}, joyce);
 ok(r.data.cards.find(c => c.store === '板橋府中店').m.rel <= -10, '落後區域平均 10% 以上', r.data.cards.find(c => c.store === '板橋府中店').m);
 ok(r.data.cards.find(c => c.store === '板橋府中店').days === 20, '未關心天數');
-r = call('home', { as: 'jill' }, robert); ok(r.ok && r.data.cards.length === 3, '總監可預覽督導畫面');
+r = call('home', { as: 'jill' }, robert); ok(r.ok && r.data.cards.length === 3, '營運經理可預覽督導畫面');
 r = call('home', { as: 'jill' }, gongwu); ok(!r.ok && r.code === 'forbidden', '部門窗口不能看我的門市', r);
 
 // --- 門市頁與權限 ---
@@ -88,12 +88,12 @@ ok(/已催工務/.test(r.data.draft.issue), '草稿含催辦', r.data.draft.issu
 ok(/台北南京店/.test(r.data.draft.plan) || /台北信義店/.test(r.data.draft.plan), '草稿含下週巡店', r.data.draft.plan);
 r = call('journal.save', { send: true, found: '' }, jill); ok(!r.ok, '必填未填不能送出', r);
 r = call('journal.save', { found: 'A', issue: 'B', plan: 'C', needs: '需要工務支援' }, jill); ok(r.ok && r.data.saved.state === '草稿', '存草稿', r);
-r = call('journal.board', {}, robert); ok(r.ok && r.data.rows.find(x => x.account === 'jill').needs === '', '草稿內容總監看不到');
+r = call('journal.board', {}, robert); ok(r.ok && r.data.rows.find(x => x.account === 'jill').needs === '', '草稿內容營運經理看不到');
 r = call('journal.save', { send: true, found: 'A', issue: 'B', plan: 'C', needs: '需要工務支援' }, jill); ok(r.ok && r.data.saved.state === '已送出', '送出', r);
 r = call('journal.board', {}, jill); ok(!r.ok && r.code === 'forbidden', '督導不能看審閱總表', r);
-r = call('journal.board', {}, robert); ok(r.ok && r.data.rows.length === 6 && r.data.rows.find(x => x.account === 'jill').state === '已送出', '總監審閱總表', r);
-r = call('journal.get', { who: 'jill' }, robert); ok(r.ok && r.data.saved.needs === '需要工務支援', '總監讀週誌');
-r = call('journal.ack', { who: 'jill', reply: '收到，週三討論' }, robert); ok(r.ok, '總監回覆', r);
+r = call('journal.board', {}, robert); ok(r.ok && r.data.rows.length === 6 && r.data.rows.find(x => x.account === 'jill').state === '已送出', '營運經理審閱總表', r);
+r = call('journal.get', { who: 'jill' }, robert); ok(r.ok && r.data.saved.needs === '需要工務支援', '營運經理讀週誌');
+r = call('journal.ack', { who: 'jill', reply: '收到，週三討論' }, robert); ok(r.ok, '營運經理回覆', r);
 r = call('journal.get', {}, jill); ok(r.data.saved.reply === '收到，週三討論' && r.data.saved.readAt, '督導看到回覆');
 r = call('journal.get', { who: 'jill' }, joyce); ok(r.ok && r.data.who.account === 'joyce', '督導帶別人的帳號只會拿到自己的', r.data && r.data.who);
 
@@ -101,8 +101,8 @@ r = call('journal.get', { who: 'jill' }, joyce); ok(r.ok && r.data.who.account =
 r = call('events.add', { type: '巡店', place: '台北信義店', start: '2026-11-27' }, jill); ok(r.ok && r.data.added === 1, '新增行程', r);
 r = call('events.add', { type: '巡店', place: 'x', start: '2026-11-27', whos: ['joyce'] }, jill);
 r = call('events.list', { from: '2026-11-27', to: '2026-11-27' }, robert);
-ok(r.data.events.filter(e => e.who === 'joyce').length === 0 && r.data.events.filter(e => e.who === 'jill').length === 2, '非總監指定別人時只會排到自己', r.data.events);
-r = call('events.add', { type: '訓練', place: '加盟主訓練', start: '2026-12-10', end: '2026-12-13', whos: ['jill', 'joyce', 'lydia'] }, robert); ok(r.ok && r.data.added === 3, '總監批次排程（連續多天一筆）', r);
+ok(r.data.events.filter(e => e.who === 'joyce').length === 0 && r.data.events.filter(e => e.who === 'jill').length === 2, '非營運經理指定別人時只會排到自己', r.data.events);
+r = call('events.add', { type: '訓練', place: '加盟主訓練', start: '2026-12-10', end: '2026-12-13', whos: ['jill', 'joyce', 'lydia'] }, robert); ok(r.ok && r.data.added === 3, '營運經理批次排程（連續多天一筆）', r);
 r = call('events.add', { type: '會議', place: '週會', start: '2026-12-01', end: '2026-12-31', weekdays: [1], whos: ['jill', 'joyce'] }, robert); ok(r.ok && r.data.added === 8, '每週一重複', r);
 r = call('events.add', { type: '跳舞', place: 'x', start: '2026-12-01' }, jill); ok(!r.ok, '不合法的類型被拒', r);
 r = call('events.list', { from: TODAY, to: '2026-12-31' }, jill);
@@ -126,7 +126,7 @@ ok(env.gas.doGet({ parameter: { cal: 'a'.repeat(64) } }).mime === 'text/plain', 
 r = call('cal.reset', {}, jill); ok(r.ok && r.data.url !== url, '重設訂閱網址');
 ok(env.gas.doGet({ parameter: { cal: url.split('cal=')[1] } }).mime === 'text/plain', '舊訂閱網址失效');
 
-// --- 總監晨報 ---
+// --- 營運經理晨報 ---
 r = call('brief', {}, jill); ok(!r.ok && r.code === 'forbidden', '督導不能看晨報', r);
 r = call('brief', {}, robert);
 ok(r.ok && r.data.kpi.stores === 18 && r.data.kpi.y > 0 && r.data.kpi.leave === 1, '晨報 KPI', r.data && r.data.kpi);
@@ -151,8 +151,8 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c3('store', { store: '台北南京店' }, tj); ok(!r.ok && r.code === 'forbidden', '主檔連動：不是自己的門市仍被拒', r);
   r = c3('brief', {}, tr);
   ok(r.ok && r.data.kpi.stores === 3 && r.data.unassigned.length === 1 && r.data.unassigned[0].supName === '林凱琳 Liisa', '主檔連動：對不到帳號的督導會列出來', r.data && r.data.unassigned);
-  ok(r.data.supervisors.some(p => p.account === 'robert'), '主檔連動：總監自己有門市時可切換檢視');
-  r = c3('home', { as: 'robert' }, tr); ok(r.ok && r.data.cards.length === 1 && r.data.cards[0].store === '台北南京店', '主檔連動：總監看自己負責的門市', r);
+  ok(r.data.supervisors.some(p => p.account === 'robert'), '主檔連動：營運經理自己有門市時可切換檢視');
+  r = c3('home', { as: 'robert' }, tr); ok(r.ok && r.data.cards.length === 1 && r.data.cards[0].store === '台北南京店', '主檔連動：營運經理看自己負責的門市', r);
 }
 
 // --- 既有系統的未結案案件（只讀）---
@@ -191,17 +191,17 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c4('todo.list', {}, tg); ok(r.data.todos.map(t => t.id).join() === 'R20261122-0003', '外部案件：工務只看到指派給工務的', r.data.todos.map(t => t.id));
   r = c4('todo.list', {}, tc); ok(r.data.todos.map(t => t.id).sort().join() === 'A000,R20261110-0001' && r.data.anom[0].id === 'A001', '外部案件：採購看到指派給採購的', r.data.todos.map(t => t.id));
   r = c4('brief', {}, tr); ok(r.data.kpi.open === 4 && r.data.late.some(t => t.id === 'R20261110-0001') && r.data.anom.total === 1 && r.data.anom.stores[0].store === '台北信義店', '外部案件：進晨報；本月物料異常另列', r.data.anom);
-  // 補充說明與請總監協助
+  // 補充說明與請營運經理協助
   r = c4('ext.note', { id: 'R20261110-0001', text: '', help: true }, tj); ok(!r.ok, '補充說明：空白被拒');
   r = c4('ext.note', { id: 'R20261122-0003', text: 'x' }, tj); ok(!r.ok && r.code === 'forbidden', '補充說明：別人門市的案件不能寫', r);
-  r = c4('ext.note', { id: 'R20261110-0001', text: '廠商來兩次沒修好', help: true }, tj); ok(r.ok && r.data.todo.help === true && r.data.todo.notes[0].help, '補充說明：督導請總監協助', r);
+  r = c4('ext.note', { id: 'R20261110-0001', text: '廠商來兩次沒修好', help: true }, tj); ok(r.ok && r.data.todo.help === true && r.data.todo.notes[0].help, '補充說明：督導請營運經理協助', r);
   r = c4('ext.note', { id: 'A001', text: '採購已補寄' }, tc); ok(r.ok && !r.data.todo.help, '補充說明：處理單位也能補充（不帶協助請求）', r);
   r = c4('brief', {}, tr); ok(r.data.help.length === 1 && r.data.help[0].id === 'R20261110-0001', '補充說明：晨報列出待協助案件', r.data.help);
   const nid = r.data.help[0].notes[0].noteId;
-  r = c4('ext.resolve', { noteId: nid, reply: 'x' }, tj); ok(!r.ok && r.code === 'forbidden', '補充說明：只有總監能回覆');
-  r = c4('ext.resolve', { noteId: nid, reply: '已請採購主管處理' }, tr); ok(r.ok, '補充說明：總監回覆', r);
+  r = c4('ext.resolve', { noteId: nid, reply: 'x' }, tj); ok(!r.ok && r.code === 'forbidden', '補充說明：只有營運經理能回覆');
+  r = c4('ext.resolve', { noteId: nid, reply: '已請採購主管處理' }, tr); ok(r.ok, '補充說明：營運經理回覆', r);
   r = c4('store', { store: '台北信義店' }, tj); const rr = r.data.todos.find(t => t.id === 'R20261110-0001');
-  ok(rr.help === false && rr.notes[0].done && rr.notes[0].reply === '已請採購主管處理', '補充說明：督導看到總監回覆', rr);
+  ok(rr.help === false && rr.notes[0].done && rr.notes[0].reply === '已請採購主管處理', '補充說明：督導看到營運經理回覆', rr);
   r = c4('brief', {}, tr); ok(r.data.help.length === 0, '補充說明：處理後從晨報消失');
   r = c4('todo.nudge', { id: 'R20261110-0001' }, tj); ok(!r.ok, '外部案件：不能在工作台催辦（不寫回原系統）', r);
   r = c4('todo.status', { id: 'R20261122-0003', status: '已完成' }, tg); ok(!r.ok, '外部案件：不能在工作台結案');
@@ -217,15 +217,15 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   const tj = tk('jill'), tr = tk('robert'), tm = tk('marketing');
   r = c5('post.add', { cat: '八卦', title: 'x' }, tm); ok(!r.ok, '公告：類別不對被拒');
   r = c5('post.add', { cat: '行銷', title: '冬季活動 DM', fileUrl: 'javascript:alert(1)' }, tm); ok(!r.ok, '公告：非 https 連結被拒', r);
-  r = c5('post.add', { cat: '行銷', title: '冬季活動 DM', body: '12/1 起跑', fileUrl: 'https://drive.google.com/x', publish: true }, tm); ok(r.ok && r.data.published === false, '公告：非總監送出只會是待核定', r);
+  r = c5('post.add', { cat: '行銷', title: '冬季活動 DM', body: '12/1 起跑', fileUrl: 'https://drive.google.com/x', publish: true }, tm); ok(r.ok && r.data.published === false, '公告：非營運經理送出只會是待核定', r);
   r = c5('posts.list', {}, tj); ok(r.ok && r.data.posts.length === 0 && r.data.pending === undefined, '公告：未核定的同仁看不到', r);
-  r = c5('posts.list', {}, tr); ok(r.data.pending.length === 1, '公告：總監看到待核定'); const pid = r.data.pending[0].id;
-  r = c5('post.decide', { id: pid, approve: true }, tm); ok(!r.ok && r.code === 'forbidden', '公告：只有總監能核定');
-  r = c5('post.decide', { id: pid, approve: true }, tr); ok(r.ok, '公告：總監核定', r);
+  r = c5('posts.list', {}, tr); ok(r.data.pending.length === 1, '公告：營運經理看到待核定'); const pid = r.data.pending[0].id;
+  r = c5('post.decide', { id: pid, approve: true }, tm); ok(!r.ok && r.code === 'forbidden', '公告：只有營運經理能核定');
+  r = c5('post.decide', { id: pid, approve: true }, tr); ok(r.ok, '公告：營運經理核定', r);
   r = c5('posts.list', {}, tj); ok(r.data.posts.length === 1 && r.data.unread === 1 && !r.data.posts[0].acked, '公告：核定後同仁看到、未確認');
   r = c5('post.ack', { id: pid }, tj); c5('post.ack', { id: pid }, tj);
   r = c5('posts.list', {}, tj); ok(r.data.unread === 0 && r.data.posts[0].acked, '公告：確認後不再算未讀');
-  r = c5('posts.list', {}, tr); ok(r.data.posts[0].ackN === 1 && r.data.posts[0].ackTotal === 10 && r.data.posts[0].waiting.length === 9, '公告：總監看到確認率', r.data.posts[0]);
+  r = c5('posts.list', {}, tr); ok(r.data.posts[0].ackN === 1 && r.data.posts[0].ackTotal === 10 && r.data.posts[0].waiting.length === 9, '公告：營運經理看到確認率', r.data.posts[0]);
   // 雲端資料夾：第一次掃描只記基準，之後有更新才產生待核定
   e5.folders.TRAIN = [{ id: 'F1', name: '開班 SOP.pdf', updated: Date.now() - 86400e3 }];
   ok(e5.gas.scanPostFolders_() === 0, '公告：第一次掃描不補發舊檔');
@@ -233,10 +233,10 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   ok(e5.gas.scanPostFolders_() === 1, '公告：資料夾有新檔自動產生待核定');
   e5.gas.Store.reset();
   r = c5('posts.list', {}, tr); ok(r.data.pending.length === 1 && r.data.pending[0].cat === '訓練' && /閉店 SOP v3/.test(r.data.pending[0].title) && r.data.pending[0].by === '雲端檔案更新', '公告：自動產生的待核定內容', r.data.pending);
-  r = c5('post.decide', { id: r.data.pending[0].id, approve: false }, tr); ok(r.ok, '公告：總監退回');
+  r = c5('post.decide', { id: r.data.pending[0].id, approve: false }, tr); ok(r.ok, '公告：營運經理退回');
   r = c5('posts.list', {}, tj); ok(r.data.posts.length === 1, '公告：退回的不會公告');
 }
-// --- 連回原系統的網址只給總監與處理單位 ---
+// --- 連回原系統的網址只給營運經理與處理單位 ---
 {
   const e6 = seed(load({ props: { REPAIR_SHEET_ID: 'REPAIR', REPAIR_ADMIN_URL: 'https://example.com/repair/?m=KEY' } }), { sample: false });
   const rp = e6.books.REPAIR.insertSheet('repairs');
@@ -246,7 +246,7 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   const tk = a => c6('login', { account: a, password: 'ugdemo1234' }).data.token;
   r = c6('todo.list', {}, tk('jill')); ok(r.data.todos[0].url === '', '管理網址：督導拿不到', r.data.todos[0]);
   r = c6('todo.list', {}, tk('gongwu')); ok(r.data.todos[0].url === 'https://example.com/repair/?m=KEY&case=R1', '管理網址：處理單位拿到並帶案件編號', r.data.todos[0].url);
-  r = c6('todo.list', {}, tk('robert')); ok(/case=R1$/.test(r.data.todos[0].url), '管理網址：總監拿到');
+  r = c6('todo.list', {}, tk('robert')); ok(/case=R1$/.test(r.data.todos[0].url), '管理網址：營運經理拿到');
 }
 
 // --- 回報寫回原系統（自動編號）---
@@ -328,7 +328,7 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   e9.fetches.length = 0;
   r = c9('ext.note', { id: 'R9', text: '廠商沒來', help: true }, tj);
   const push = e9.fetches.find(f => /multicast$/.test(f.url));
-  ok(r.ok && push && push.auth === 'Bearer TESTTOKEN' && push.body.to.join() === uid && /請協助/.test(push.body.messages[0].text) && /廠商沒來/.test(push.body.messages[0].text), 'LINE：請協助會推給已綁定的總監', r.ok ? push : r);
+  ok(r.ok && push && push.auth === 'Bearer TESTTOKEN' && push.body.to.join() === uid && /請協助/.test(push.body.messages[0].text) && /廠商沒來/.test(push.body.messages[0].text), 'LINE：請協助會推給已綁定的營運經理', r.ok ? push : r);
   e9.fetches.length = 0;
   r = c9('post.add', { cat: '營運', title: 'x', publish: true }, tr); ok(r.ok && e9.fetches.length === 0, 'LINE：沒有人綁定時不呼叫 LINE', r);
   r = c9('line.unbind', {}, tr); ok(r.ok && !bound().length, 'LINE：可以解除綁定');

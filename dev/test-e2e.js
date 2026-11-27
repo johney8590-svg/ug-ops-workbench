@@ -127,7 +127,7 @@ const URL_ = 'http://localhost:' + process.env.PORT + '/';
   await p.waitForFunction(() => !document.getElementById('view').textContent.includes('冷氣漏水')); ok(true, '部門結案');
   await p.context().close();
 
-  // ---- 總監 ----
+  // ---- 營運經理 ----
   p = await open(); await login(p, 'robert');
   await p.click('[data-tab=brief]'); await p.click('[data-name=bmode][data-v=board]'); await p.waitForSelector('[data-act=b-sup]');
   ok(/各部門手上的事/.test(await p.textContent('#view')) && await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '工作看板：顯示且沒有水平捲動'); await shot(p, '9b-board');
@@ -145,9 +145,9 @@ const URL_ = 'http://localhost:' + process.env.PORT + '/';
   ok(/待閱/.test(await p.textContent('[data-who=jill]')), '週誌待閱');
   await p.click('[data-who=jill]'); await p.waitForSelector('#j-reply'); await shot(p, '10-review');
   await p.fill('#j-reply', '收到，週三一起看'); await p.click('[data-act=j-ack]');
-  await p.waitForFunction(() => /已讀/.test(document.querySelector('[data-who=jill]').textContent)); ok(true, '總監回覆週誌');
+  await p.waitForFunction(() => /已讀/.test(document.querySelector('[data-who=jill]').textContent)); ok(true, '營運經理回覆週誌');
   await p.click('[data-tab=home]'); await p.waitForSelector('#as-sel'); await p.selectOption('#as-sel', 'joyce');
-  await p.waitForSelector('button.card[data-store="板橋府中店"]'); ok(true, '總監切換檢視督導');
+  await p.waitForSelector('button.card[data-store="板橋府中店"]'); ok(true, '營運經理切換檢視督導');
   await p.click('[data-tab=sched]'); await p.waitForSelector('.day'); await p.click('[data-act=ev-new]');
   await p.fill('#ev-place', '加盟主訓練'); await p.selectOption('#ev-type', '訓練'); await p.fill('#ev-start', '2026-12-10'); await p.fill('#ev-end', '2026-12-13');
   await p.check('input[name=ev-who][value=jill]'); await p.check('input[name=ev-who][value=joyce]'); await p.uncheck('input[name=ev-who][value=robert]');

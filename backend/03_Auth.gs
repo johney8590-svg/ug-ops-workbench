@@ -147,7 +147,7 @@ function masterStores_() {
   if (!out.length) throw new Error('門店資料表沒有讀到任何門市');
   return out;
 }
-/** 這個人可以看的門市：總監看全部，督導看自己負責的，部門窗口看全部（只用於待辦）。 */
+/** 這個人可以看的門市：營運經理看全部，督導看自己負責的，部門窗口看全部（只用於待辦）。 */
 function storesFor_(me) {
   const all = activeStores_();
   if (isSupervisor_(me)) return all.filter(function (s) { return s.supervisor === me.account; });

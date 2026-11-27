@@ -1,7 +1,7 @@
 /**
  * 版本公告：行銷／營運／訓練三類。
  * 來源有兩種：(1) 人工新增；(2) 指定的雲端資料夾裡有檔案更新時，系統自動產生一則「待核定」。
- * 一律要營運總監核定後才會公告給同仁；同仁看完按「已確認」，總監看得到確認率。
+ * 一律要營運經理核定後才會公告給同仁；同仁看完按「已確認」，營運經理看得到確認率。
  */
 const POST_CATS = { '行銷': 'ANN_FOLDER_MARKETING', '營運': 'ANN_FOLDER_OPS', '訓練': 'ANN_FOLDER_TRAINING' };
 
@@ -45,7 +45,7 @@ function postAdd_(me, d) {
   return { published: publish };
 }
 function postDecide_(me, d) {
-  if (!isDirector_(me)) fail_('只有營運總監可以核定公告', 'forbidden');
+  if (!isDirector_(me)) fail_('只有營運經理可以核定公告', 'forbidden');
   const p = Store.rows('posts').filter(function (x) { return x.id === str_(d.id, 40); })[0];
   if (!p || p.state !== '待核定') fail_('找不到這則待核定的公告');
   const patch = d.approve ? { state: '已公告', approvedAt: nowStamp_(), approvedBy: me.account } : { state: '退回', approvedAt: '', approvedBy: me.account };

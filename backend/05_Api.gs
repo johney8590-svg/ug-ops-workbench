@@ -1,5 +1,5 @@
 /**
- * 業務邏輯：我的門市、門市頁、訪店紀錄、待辦（回報／催辦／去重）、週誌、行程、總監晨報。
+ * 業務邏輯：我的門市、門市頁、訪店紀錄、待辦（回報／催辦／去重）、週誌、行程、營運經理晨報。
  * 每個函式的第一個參數 me 是已通過驗證的登入者；權限檢查都在伺服器端做，不信任前端。
  */
 
@@ -17,7 +17,7 @@ function ctx_() {
  */
 function isAnom_(t) { return yes_(t.ext) && t.source === '物料異常'; }
 function isAnomNew_(t, today) { return isAnom_(t) && String(t.createdAt).slice(0, 7) >= today.slice(0, 7); }
-/** 督導或處理單位寫給總監的補充說明（存在工作台，不寫回原系統）。 */
+/** 督導或處理單位寫給營運經理的補充說明（存在工作台，不寫回原系統）。 */
 function caseNotes_(caseId) {
   return Store.rows('extnotes').filter(function (n) { return n.caseId === caseId; }).map(function (n) {
     return { noteId: n.id, at: n.at, by: nameOf_(n.by), text: n.text, help: yes_(n.help), done: !!n.doneAt, reply: n.reply || '', photo: !!n.photoId };
@@ -243,7 +243,7 @@ function todoNote_(me, d, isNudge) {
 }
 function todoStatus_(me, d) {
   const t = findTodo_(str_(d.id, 40));
-  if (!(isDirector_(me) || (me.role === 'dept' && me.dept === t.dept))) fail_('只有處理單位或營運總監可以變更狀態', 'forbidden');
+  if (!(isDirector_(me) || (me.role === 'dept' && me.dept === t.dept))) fail_('只有處理單位或營運經理可以變更狀態', 'forbidden');
   if (['待受理', '處理中', '已完成'].indexOf(d.status) < 0) fail_('狀態不正確');
   const patch = { status: d.status, closedAt: d.status === '已完成' ? nowStamp_() : '', closedBy: d.status === '已完成' ? me.account : '' };
   const note = str_(d.note, 500);
@@ -405,7 +405,7 @@ function eventFields_(d) {
 function eventsAdd_(me, d) {
   const f = eventFields_(d);
   let whos = Array.isArray(d.whos) && d.whos.length ? d.whos.map(String) : [me.account];
-  if (!isDirector_(me)) whos = [me.account];                          // 非總監只能排自己的行程
+  if (!isDirector_(me)) whos = [me.account];                          // 非營運經理只能排自己的行程
   const valid = {}; Store.rows('people').forEach(function (p) { if (yes_(p.active)) valid[p.account] = 1; });
   whos = whos.filter(function (w, i, a) { return valid[w] && a.indexOf(w) === i; });
   if (!whos.length) fail_('請至少選一位');
@@ -471,7 +471,7 @@ function ics_(p) {
   return L.join('\r\n');
 }
 
-/* ---------- 總監晨報 ---------- */
+/* ---------- 營運經理晨報 ---------- */
 function brief_(me) {
   if (!isDirector_(me)) fail_('沒有權限', 'forbidden');
   const c = ctx_();
@@ -507,7 +507,7 @@ function brief_(me) {
     unassigned: stores.filter(function (s) { return !s.supervisor; }).map(function (s) { return { store: s.store, supName: s.supName || '' }; }) };
 }
 
-/* ---------- 既有系統案件的補充說明（給總監看實際狀況，或請總監協助跨部門溝通） ---------- */
+/* ---------- 既有系統案件的補充說明（給營運經理看實際狀況，或請營運經理協助跨部門溝通） ---------- */
 function extCase_(me, id) {
   const t = allTodos_().filter(function (x) { return yes_(x.ext) && x.id === id; })[0];
   if (!t) fail_('找不到這個案件，可能已經在原系統結案');
@@ -520,16 +520,16 @@ function extNote_(me, d) {
   if (!text) fail_('請寫下實際狀況');
   const help = !!d.help && !isDirector_(me);
   withLock_(function () { Store.append('extnotes', { id: uid_('N'), caseId: t.id, store: t.store, at: nowStamp_(), by: me.account, text: text, help: help, doneAt: '', doneBy: '', reply: '' }); });
-  audit_(me.account, 'ext.note', t.id + (help ? ' 請總監協助' : ''));
+  audit_(me.account, 'ext.note', t.id + (help ? ' 請營運經理協助' : ''));
   if (help) linePush_(lineRole_(function (p) { return p.role === 'director'; }), '【請協助】' + me.name + '｜' + t.store + '（' + t.source + ' ' + t.id + '）\n' + text);
   return { todo: todoView_(t, today_()) };
 }
 function extResolve_(me, d) {
-  if (!isDirector_(me)) fail_('只有營運總監可以回覆協助請求', 'forbidden');
+  if (!isDirector_(me)) fail_('只有營運經理可以回覆協助請求', 'forbidden');
   const n = Store.rows('extnotes').filter(function (x) { return x.id === str_(d.noteId, 40); })[0];
   if (!n) fail_('找不到這則說明');
   withLock_(function () { Store.update('extnotes', n._row, { doneAt: nowStamp_(), doneBy: me.account, reply: str_(d.reply, 800) }); });
   audit_(me.account, 'ext.resolve', n.caseId);
-  linePush_([n.by], '【總監已回覆】' + n.store + '（' + n.caseId + '）' + (str_(d.reply, 800) ? '\n' + str_(d.reply, 300) : ''));
+  linePush_([n.by], '【營運經理已回覆】' + n.store + '（' + n.caseId + '）' + (str_(d.reply, 800) ? '\n' + str_(d.reply, 300) : ''));
   return {};
 }
