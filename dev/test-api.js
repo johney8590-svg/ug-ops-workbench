@@ -334,6 +334,18 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = c9('line.unbind', {}, tr); ok(r.ok && !bound().length, 'LINE：可以解除綁定');
 }
 
+// --- 行程：同一天勾多間門市（含別人的店）---
+{
+  r = call('events.list', { from: '2026-12-07', to: '2026-12-13' }, jill);
+  const st = r.data.stores, mineN = st.filter(x => x.mine).length, other = st.find(x => !x.mine);
+  ok(mineN === 3 && st[0].mine && other && other.sup, '行程：門市清單自己的排前面，其他門市附督導', { mineN, other });
+  r = call('events.add', { type: '巡店', start: '2026-12-08', places: ['台北信義店', other.store, '不存在的店', '台北信義店'] }, jill);
+  ok(r.ok && r.data.added === 2 && r.data.places === 2, '行程：勾兩間店排成兩筆，不認得的店與重複的會略過', r);
+  r = call('events.list', { from: '2026-12-08', to: '2026-12-08' }, jill);
+  ok(r.data.events.filter(e => e.who === 'jill' && e.start === '2026-12-08').map(e => e.place).sort().join() === ['台北信義店', other.store].sort().join(), '行程：別人的店也有紀錄', r.data.events);
+  r = call('events.add', { type: '巡店', start: '2026-12-08', places: ['不存在的店'] }, jill); ok(!r.ok, '行程：全部不認得的店會被擋');
+}
+
 // --- 速度：一次查多個畫面、暫存 ---
 {
   r = call('batch', { calls: [{ action: 'todo.list', data: {} }, { action: 'todo.add', data: { store: '台北信義店', text: 'x' } }, { action: 'board', data: {} }, { action: 'posts.list', data: {} }] }, jill);

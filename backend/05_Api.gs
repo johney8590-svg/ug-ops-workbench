@@ -391,7 +391,12 @@ function eventsList_(me, d) {
   const who = str_(d.who, 60);
   const list = Store.rows('events').filter(function (e) { return ok[e.who] && (!who || e.who === who) && e.start <= to && e.end >= from; }).map(eventView_)
     .sort(function (a, b) { return a.start.localeCompare(b.start) || a.name.localeCompare(b.name); });
-  return { today: today, from: from, to: to, events: list, days: calendarDays_(from, to), people: people.map(function (p) { return { account: p.account, name: p.name, dept: p.dept, role: p.role }; }), types: EVENT_TYPES };
+  return { today: today, from: from, to: to, events: list, days: calendarDays_(from, to), stores: eventStores_(me), people: people.map(function (p) { return { account: p.account, name: p.name, dept: p.dept, role: p.role }; }), types: EVENT_TYPES };
+}
+/** 排行程用的門市清單：自己負責的排前面，其他門市附上負責督導（去別人的店巡訪也能排）。 */
+function eventStores_(me) {
+  return activeStores_().map(function (s) { return { store: s.store, mine: s.supervisor === me.account, sup: s.supervisor ? nameOf_(s.supervisor) : '' }; })
+    .sort(function (a, b) { return (b.mine - a.mine) || a.sup.localeCompare(b.sup) || a.store.localeCompare(b.store); });
 }
 function eventFields_(d) {
   if (EVENT_TYPES.indexOf(d.type) < 0) fail_('請選擇行程類型');
@@ -403,7 +408,16 @@ function eventFields_(d) {
   return { type: d.type, place: place, start: d.start, end: end };
 }
 function eventsAdd_(me, d) {
+  // 同一天勾好幾間門市：每間門市各存一筆行程
+  let places = null;
+  if (Array.isArray(d.places) && d.places.length) {
+    const known = {}; activeStores_().forEach(function (s) { known[s.store] = 1; });
+    places = d.places.map(function (x) { return str_(x, 100); }).filter(function (x, i, a) { return known[x] && a.indexOf(x) === i; });
+    if (!places.length) fail_('請至少勾選一間門市');
+    d = Object.assign({}, d, { place: places[0] });
+  }
   const f = eventFields_(d);
+  if (!places) places = [f.place];
   let whos = Array.isArray(d.whos) && d.whos.length ? d.whos.map(String) : [me.account];
   if (!isDirector_(me)) whos = [me.account];                          // 非營運經理只能排自己的行程
   const valid = {}; Store.rows('people').forEach(function (p) { if (yes_(p.active)) valid[p.account] = 1; });
@@ -415,15 +429,17 @@ function eventsAdd_(me, d) {
   if (!days.length) fail_('選擇的日期範圍內沒有符合的星期');
   const rows = [];
   whos.forEach(function (w) {
-    if (days.length === all.length) rows.push({ who: w, start: f.start, end: f.end });      // 連續多天存成一筆
-    else days.forEach(function (x) { rows.push({ who: w, start: x, end: x }); });
+    places.forEach(function (pl) {
+      if (days.length === all.length) rows.push({ who: w, place: pl, start: f.start, end: f.end });      // 連續多天存成一筆
+      else days.forEach(function (x) { rows.push({ who: w, place: pl, start: x, end: x }); });
+    });
   });
   if (rows.length > 200) fail_('一次最多新增 200 筆，請縮小範圍');
   withLock_(function () {
-    rows.forEach(function (r) { Store.append('events', { id: uid_('E'), who: r.who, start: r.start, end: r.end, type: f.type, place: f.place, todoId: '', createdBy: me.account, updatedAt: nowStamp_() }); });
+    rows.forEach(function (r) { Store.append('events', { id: uid_('E'), who: r.who, start: r.start, end: r.end, type: f.type, place: r.place, todoId: '', createdBy: me.account, updatedAt: nowStamp_() }); });
   });
   audit_(me.account, 'events.add', whos.join(',') + ' ' + f.start + '~' + f.end + ' ' + f.type + ' ×' + rows.length);
-  return { added: rows.length, people: whos.length };
+  return { added: rows.length, people: whos.length, places: places.length };
 }
 function findEvent_(me, id) {
   const e = Store.rows('events').filter(function (x) { return x.id === id; })[0];

@@ -411,7 +411,7 @@
     var ym = S.sched.month, first = ym + '-01', last = addDays(monthAdd(ym, 1) + '-01', -1), from = monday(first), to = addDays(monday(last), 6);
     swr('events.list', { from: from, to: to }, function (d) {
       d.days = d.days || [];
-      S.data.people = d.people; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days;
+      S.data.people = d.people; S.data.stores = d.stores || []; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days;
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
       var h = '<div class="row"><button class="btn sm" data-act="mo" data-n="-1" aria-label="上個月">←</button><b class="num">' + (+ym.slice(0, 4)) + ' 年 ' + (+ym.slice(5, 7)) + ' 月</b><button class="btn sm" data-act="mo" data-n="1" aria-label="下個月">→</button>' +
         (ym !== S.today.slice(0, 7) ? '<button class="btn sm" data-act="mo" data-n="0">回本月</button>' : '') + '</div>' + schedHead() +
@@ -438,7 +438,7 @@
     if (S.sched.mode === 'month') return loadMonth();
     var from = S.sched.from, to = addDays(from, 6);
     swr('events.list', { from: from, to: to }, function (d) {
-      S.data.people = d.people; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days || [];
+      S.data.people = d.people; S.data.stores = d.stores || []; S.data.types = d.types; S.data.events = d.events; S.data.days = d.days || [];
       var evs = d.events.filter(function (e) { return S.sched.scope === 'all' || e.who === S.me.account; });
       var h = '<div class="row"><button class="btn sm" data-act="wk" data-n="-7" aria-label="上一週">←</button><b class="num">' + esc(md(from)) + ' – ' + esc(md(to)) + '</b><button class="btn sm" data-act="wk" data-n="7" aria-label="下一週">→</button>' +
         (from !== monday(S.today) ? '<button class="btn sm" data-act="wk" data-n="0">回本週</button>' : '') + '</div>' +
@@ -463,11 +463,26 @@
       '<label class="f">地點或說明<input type="text" id="ev-place" maxlength="100" list="ev-stores" value="' + esc(e.place) + '" placeholder="例：台北信義店"></label><datalist id="ev-stores">' + stores.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
       '<div class="row"><label class="f grow">開始<input type="date" id="ev-start" value="' + esc(e.start) + '"></label><label class="f grow">結束（單日免填）<input type="date" id="ev-end" value="' + esc(e.end && e.end !== e.start ? e.end : '') + '"></label></div>';
     if (isNew) {
+      var all = S.data.stores || [], mine = all.filter(function (x) { return x.mine; }), others = all.filter(function (x) { return !x.mine; });
+      var box = function (x) { return '<label data-q="' + esc(x.store + ' ' + x.sup) + '"><input type="checkbox" name="ev-store" value="' + esc(x.store) + '">' + esc(x.store) + '</label>'; };
+      var groups = {}, order = []; others.forEach(function (x) { var k = x.sup || '尚未指定督導'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(x); });
+      h = h.replace('<label class="f">地點或說明', '<div id="ev-stores-box"><label class="f">要去哪幾間門市（可複選，同一天各排一筆）</label>' +
+        (mine.length ? '<div class="pick">' + mine.map(box).join('') + '</div>' : '') +
+        (others.length ? '<details class="more"' + (mine.length ? '' : ' open') + '><summary>' + (mine.length ? '其他門市（去別人的店）' : '選擇門市') + '</summary><input type="text" id="ev-q" placeholder="輸入店名或督導名字篩選" autocomplete="off">' +
+          order.map(function (k) { return '<div class="grp"><div class="small muted">' + esc(k) + '</div><div class="pick">' + groups[k].map(box).join('') + '</div></div>'; }).join('') + '</details>' : '') +
+        '</div><label class="f" id="ev-place-f">地點或說明');
       h += '<label class="f">只排這幾天（不選＝期間內每天）</label><div class="pick">' + [1, 2, 3, 4, 5, 6, 0].map(function (w) { return '<label><input type="checkbox" name="ev-wd" value="' + w + '">週' + WD[w] + '</label>'; }).join('') + '</div>';
       if (dir) h += '<label class="f">排給誰（可複選）</label><div class="pick">' + S.data.people.map(function (p) { return '<label><input type="checkbox" name="ev-who" value="' + esc(p.account) + '"' + (p.account === S.me.account ? ' checked' : '') + '>' + esc(p.name) + '</label>'; }).join('') + '</div>';
       h += '<div class="btns"><button class="btn primary block" data-act="ev-add">新增</button></div>';
     } else h += '<div class="btns"><button class="btn primary grow" data-act="ev-save" data-id="' + esc(e.id) + '">儲存</button><button class="btn danger" data-act="ev-del" data-id="' + esc(e.id) + '">刪除</button></div>';
     openSheet(isNew ? '新增行程' : '修改行程' + (e.name && e.who !== S.me.account ? '・' + e.name : ''), h);
+    evMode();
+  }
+  /** 類型是「巡店」就用勾門市的，其他類型用文字填地點。 */
+  function evMode() {
+    var b = topBody(); if (!b) return; var sb = b.querySelector('#ev-stores-box'), pf = b.querySelector('#ev-place-f'), t = b.querySelector('#ev-type'); if (!sb || !pf || !t) return;
+    var visit = t.value === '巡店' && b.querySelectorAll('input[name="ev-store"]').length > 0;
+    sb.hidden = !visit; pf.hidden = visit;
   }
   function eventFields() { var b = topBody(); return { type: b.querySelector('#ev-type').value, place: b.querySelector('#ev-place').value.trim(), start: b.querySelector('#ev-start').value, end: b.querySelector('#ev-end').value }; }
   function vals(name) { return Array.prototype.map.call(topBody().querySelectorAll('input[name="' + name + '"]:checked'), function (x) { return x.value; }); }
@@ -706,7 +721,9 @@
     'cal-day': function (b) { openDay(b.dataset.day); },
     'ev-edit': function (b) { var e = (S.data.events || []).filter(function (x) { return x.id === b.dataset.id; })[0]; if (e) eventForm(e); },
     'ev-add': function (b) {
-      var f = eventFields(); if (!f.place) return toast('請填寫地點或說明'); if (!f.start) return toast('請選擇日期');
+      var f = eventFields(), sb = topBody().querySelector('#ev-stores-box');
+      if (sb && !sb.hidden) { f.places = vals('ev-store'); if (!f.places.length) return toast('請至少勾選一間門市'); f.place = f.places[0]; }
+      if (!f.place) return toast('請填寫地點或說明'); if (!f.start) return toast('請選擇日期');
       f.weekdays = vals('ev-wd').map(Number); if (S.me.role === 'director') { f.whos = vals('ev-who'); if (!f.whos.length) return toast('請至少選一位'); }
       busy(b, api('events.add', f)).then(function (r) { closeSheet(); toast('已新增 ' + r.added + ' 筆行程'); S.sched.from = monday(f.start); S.sched.month = f.start.slice(0, 7); loadSched(); }).catch(oops);
     },
@@ -744,7 +761,14 @@
       if (t.dataset.f === 'shotTime' || t.dataset.f === 'shotDate') { SP.shotSrc = '手動輸入'; var n = SP.body.querySelector('#shot-note'); if (n) n.outerHTML = shotNote(); }
     }
   });
+  document.addEventListener('input', function (ev) {
+    if (ev.target.id !== 'ev-q') return;
+    var q = ev.target.value.trim().toLowerCase(), box = ev.target.parentNode;
+    Array.prototype.forEach.call(box.querySelectorAll('label[data-q]'), function (l) { l.hidden = !!q && l.dataset.q.toLowerCase().indexOf(q) < 0 && !l.querySelector('input').checked; });
+    Array.prototype.forEach.call(box.querySelectorAll('.grp'), function (g) { g.hidden = !g.querySelector('label[data-q]:not([hidden])'); });
+  });
   document.addEventListener('change', function (ev) {
+    if (ev.target.id === 'ev-type') evMode();
     var t = ev.target;
     if (t.id === 'shot') onShot(t.files[0]);
     if (t.id === 'as-sel') { S.as = t.value; loadHome(); }
