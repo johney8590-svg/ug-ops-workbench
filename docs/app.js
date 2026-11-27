@@ -468,7 +468,7 @@
       var groups = {}, order = []; others.forEach(function (x) { var k = x.sup || '尚未指定督導'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(x); });
       h = h.replace('<label class="f">地點或說明', '<div id="ev-stores-box"><label class="f">要去哪幾間門市（可複選，同一天各排一筆）</label>' +
         (mine.length ? '<div class="pick">' + mine.map(box).join('') + '</div>' : '') +
-        (others.length ? '<details class="more"' + (mine.length ? '' : ' open') + '><summary>' + (mine.length ? '其他門市（去別人的店）' : '選擇門市') + '</summary><input type="text" id="ev-q" placeholder="輸入店名或督導名字篩選" autocomplete="off">' +
+        (others.length ? '<details class="more"' + (mine.length ? '' : ' open') + '><summary>' + (mine.length ? '其他門市' : '選擇門市') + '</summary><input type="text" id="ev-q" placeholder="輸入店名或督導名字篩選" autocomplete="off">' +
           order.map(function (k) { return '<div class="grp"><div class="small muted">' + esc(k) + '</div><div class="pick">' + groups[k].map(box).join('') + '</div></div>'; }).join('') + '</details>' : '') +
         '</div><label class="f" id="ev-place-f">地點或說明');
       h += '<label class="f">只排這幾天（不選＝期間內每天）</label><div class="pick">' + [1, 2, 3, 4, 5, 6, 0].map(function (w) { return '<label><input type="checkbox" name="ev-wd" value="' + w + '">週' + WD[w] + '</label>'; }).join('') + '</div>';
