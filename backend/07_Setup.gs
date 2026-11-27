@@ -183,7 +183,7 @@ function checkSources() {
   if (prop_('COMPLAINT_SHEET_ID')) {
     try {
       const c = readComplaints_(prop_('COMPLAINT_SHEET_ID')), miss = Object.keys(c.miss);
-      console.log('客訴｜分頁「' + c.tab + '」共 ' + c.total + ' 筆，未結案 ' + c.open.length + ' 筆；店名對不上主檔的（' + miss.length + '）：' + miss.slice(0, 40).join('、'));
+      console.log('客訴｜分頁「' + c.tab + '」共 ' + c.total + ' 筆，未結案 ' + c.open.length + ' 筆；店名對不上主檔的（' + miss.length + '）：' + miss.slice(0, 40).map(function (k) { const n = normStore_(k), c = activeStores_().filter(function (x) { return normStore_(x.store).indexOf(n) >= 0; }).map(function (x) { return x.store; }); return k + '→' + (c.length ? '可能是 ' + c.slice(0, 4).join('/') : '主檔沒有'); }).join('；'));
     } catch (e) { console.log('客訴：讀取失敗 ' + e.message); }
   } else console.log('客訴：尚未設定 COMPLAINT_SHEET_ID');
   [['修繕', 'REPAIR_SHEET_ID'], ['物料異常', 'ANOMALY_SHEET_ID'], ['文宣', 'PROMO_SHEET_ID']].forEach(function (x) {

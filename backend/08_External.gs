@@ -144,7 +144,7 @@ function complaintStats_(store) {
 
 /**
  * 把別的系統寫的店名對回主檔的店名：差一個「店」字或空白算同一間；
- * 客訴表常用簡寫（例：「南西」「桃園藝文」），完全相同對不到時，找「結尾相同」且唯一的那一間。對不到回傳空字串。
+ * 客訴表常用簡寫（例：「南西」「桃園藝文」），完全相同對不到時，找「結尾相同」且唯一的那一間，再不行找「包含這幾個字」且唯一的那一間。對不到回傳空字串。
  */
 function storeResolver_() {
   const byNorm = {}; activeStores_().forEach(function (s) { byNorm[normStore_(s.store)] = s.store; });
@@ -154,6 +154,7 @@ function storeResolver_() {
     if (memo[k] !== undefined) return memo[k];
     let m = byNorm[k] || '';
     if (!m && k.length >= 2) { const c = norms.filter(function (x) { return x.slice(-k.length) === k; }); if (c.length === 1) m = byNorm[c[0]]; }
+    if (!m && k.length >= 2) { const c = norms.filter(function (x) { return x.indexOf(k) >= 0; }); if (c.length === 1) m = byNorm[c[0]]; }   // 再放寬：店名裡有這幾個字、而且只有一間
     return (memo[k] = m);
   };
 }
