@@ -16,6 +16,7 @@ const TABS = {
   extnotes: ['id', 'caseId', 'store', 'at', 'by', 'text', 'help', 'doneAt', 'doneBy', 'reply', 'photoId'],
   posts:    ['id', 'cat', 'title', 'body', 'fileId', 'fileName', 'fileUrl', 'fileUpdated', 'state', 'createdAt', 'createdBy', 'approvedAt', 'approvedBy'],
   postacks: ['postId', 'account', 'at'],
+  mytodos:  ['id', 'createdAt', 'owner', 'by', 'text', 'store', 'due', 'note', 'doneAt', 'doneBy'],
   calendar: ['date', 'name', 'kind'],
   sessions: ['tokenHash', 'account', 'expires'],
   log:      ['at', 'account', 'action', 'detail']

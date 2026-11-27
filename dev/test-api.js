@@ -348,6 +348,28 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   r = call('events.add', { type: '巡店', start: '2026-12-08', places: ['不存在的店'] }, jill); ok(!r.ok, '行程：全部不認得的店會被擋');
 }
 
+// --- 自訂待辦 ---
+{
+  const e3 = seed(load(), { sample: false });
+  const c3b = (action, data, token) => JSON.parse(e3.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  const tk3 = a => c3b('login', { account: a, password: 'ugdemo1234' }).data.token, tj = tk3('jill'), ty = tk3('joyce'), tr = tk3('robert'), tg = tk3('gongwu');
+  r = c3b('mytodo.add', { text: '跟加盟主確認排班', due: '2026-11-20', store: '台北信義店', owners: ['joyce'] }, tj); ok(r.ok && r.data.added === 1, '自訂待辦：督導可以新增給自己（指定別人會被忽略）', r);
+  r = c3b('todo.list', {}, tj); const mine = r.data.my.items;
+  ok(mine.length === 1 && mine[0].mine && mine[0].late && mine[0].store === '台北信義店' && r.data.my.people.length === 0, '自訂待辦：出現在自己的清單，過期會標逾期', mine);
+  ok(c3b('todo.list', {}, ty).data.my.items.length === 0, '自訂待辦：別人看不到');
+  ok(!c3b('mytodo.done', { id: mine[0].id }, ty).ok, '自訂待辦：別人不能幫我按完成');
+  r = c3b('mytodo.done', { id: mine[0].id }, tj); ok(r.ok && c3b('todo.list', {}, tj).data.my.items[0].done, '自訂待辦：可以標為完成');
+  r = c3b('mytodo.done', { id: mine[0].id, done: false }, tj); ok(r.ok && !c3b('todo.list', {}, tj).data.my.items[0].done, '自訂待辦：可以改回未完成');
+  r = c3b('mytodo.add', { text: '月底前交盤點表', owners: ['jill', 'joyce', 'nobody'] }, tr); ok(r.ok && r.data.added === 2, '自訂待辦：營運經理可以一次交辦給多位', r);
+  const jj = c3b('todo.list', {}, tj).data.my.items.find(t => t.text === '月底前交盤點表');
+  ok(jj && jj.mine && jj.byName === 'Robert', '自訂待辦：被交辦的人看得到是誰交辦的', jj);
+  ok(c3b('todo.list', {}, tr).data.my.items.filter(t => !t.mine).length === 2 && c3b('todo.list', {}, tr).data.my.people.length > 5, '自訂待辦：營運經理看得到自己交辦出去的');
+  ok(!c3b('mytodo.delete', { id: jj.id }, tj).ok && c3b('mytodo.done', { id: jj.id }, tj).ok, '自訂待辦：被交辦的事不能刪，但可以完成');
+  ok(c3b('mytodo.delete', { id: mine[0].id }, tj).ok && !c3b('todo.list', {}, tj).data.my.items.some(t => t.id === mine[0].id), '自訂待辦：自己建的可以刪');
+  r = c3b('mytodo.add', { text: '叫料提醒' }, tg); ok(r.ok && c3b('todo.list', {}, tg).data.my.items.length === 1, '自訂待辦：部門窗口也能用');
+  ok(!c3b('mytodo.add', { text: '' }, tj).ok && !c3b('mytodo.add', { text: 'x', store: '不存在的店' }, tj).ok, '自訂待辦：空白或不存在的門市會被擋');
+}
+
 // --- 客訴紀錄表 ---
 {
   const e4 = seed(load({ props: { COMPLAINT_SHEET_ID: 'COMPLAINT', COMPLAINT_GID: '0' } }), { sample: false });

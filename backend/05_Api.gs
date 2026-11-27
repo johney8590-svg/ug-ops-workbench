@@ -268,7 +268,7 @@ function todoList_(me, d) {
   if (!d.all) list = list.filter(isOpenTodo_);
   const anom = list.filter(function (t) { return isAnomNew_(t, today); });
   list = list.filter(function (t) { return !isAnomNew_(t, today); });
-  return { today: today, todos: list.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return (b.late - a.late) || (b.days - a.days); }).slice(0, 300),
+  return { today: today, my: myTodos_(me), todos: list.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return (b.late - a.late) || (b.days - a.days); }).slice(0, 300),
     anom: anom.map(function (t) { return todoView_(t, today); }).sort(function (a, b) { return a.days - b.days; }).slice(0, 150), anomTotal: anom.length };
 }
 function photoGet_(me, d) {

@@ -222,3 +222,13 @@ button.pg-e{cursor:pointer} button.pg-e:hover{background:var(--surface-2)}
 .pg-add{width:100%;min-height:36px;background:none;border:0;color:var(--line-2);font-size:16px;cursor:pointer;opacity:0}
 td:hover > .pg-add,.pg-add:focus{opacity:1}
 @media (max-width:959px){ table.pg{width:max-content;table-layout:auto} .pg thead th:not(.pg-n),.pg td{min-width:96px;max-width:132px} .pg-add{opacity:.6} }
+
+/* 自訂待辦 */
+.item.mt{display:flex;align-items:flex-start;gap:12px}
+.item.mt .grow{flex:1;min-width:0}
+.tick{flex:none;width:28px;height:28px;margin-top:2px;border-radius:50%;border:2px solid var(--line-2);background:var(--surface);color:var(--on-brand);font-size:15px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.tick:hover{border-color:var(--brand)}
+.mt.done .tick{background:var(--brand);border-color:var(--brand)}
+.mt.done .mt-t{color:var(--muted);text-decoration:line-through}
+.mt-t{font-weight:600}
+details.more .item.mt{padding:10px 0;border-top:1px solid var(--line)}

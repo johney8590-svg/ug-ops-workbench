@@ -393,7 +393,18 @@
     swr('todo.list', {}, function (d) {
       S.data.todos = d.todos;
       var late = d.todos.filter(function (t) { return t.late; }).length;
-      view().innerHTML = '<div class="sec"><h2>' + (S.me.role === 'dept' ? esc(S.me.dept) + '的待辦' : '未結案待辦') + '（' + d.todos.length + '）</h2>' + (late ? '<span class="chip bad right">逾期 ' + late + '</span>' : '') + '</div>' +
+      var my = d.my || { items: [], people: [] }; S.data.myPeople = my.people;
+      var openMy = my.items.filter(function (t) { return !t.done; }), doneMy = my.items.filter(function (t) { return t.done; });
+      var myRow = function (t) {
+        return '<div class="item mt' + (t.done ? ' done' : '') + '"><button class="tick" data-act="mt-done" data-id="' + esc(t.id) + '" data-done="' + (t.done ? 0 : 1) + '" aria-label="' + (t.done ? '改回未完成' : '標為完成') + '">' + (t.done ? '✓' : '') + '</button><div class="grow"><div class="mt-t">' + esc(t.text) + '</div>' +
+          '<div class="chips">' + (t.store ? '<span class="chip">' + esc(t.store) + '</span>' : '') + (t.due ? '<span class="chip ' + (t.late ? 'bad' : '') + '">' + (t.late ? '逾期・' : '期限 ') + esc(md(t.due)) + '</span>' : '') +
+          (!t.mine ? '<span class="chip today">交辦給 ' + esc(t.ownerName) + '</span>' : t.byName ? '<span class="chip today">' + esc(t.byName) + ' 交辦</span>' : '') + (t.done ? '<span class="chip good">' + esc(md(t.doneAt)) + ' 完成</span>' : '') + '</div>' +
+          (t.note ? '<div class="small muted pre">' + esc(t.note) + '</div>' : '') + '</div><button class="btn sm" data-act="mt-del" data-id="' + esc(t.id) + '" aria-label="刪除">✕</button></div>';
+      };
+      var myHtml = '<div class="sec"><h2>我的待辦（' + openMy.length + '）</h2><button class="btn sm right" data-act="mt-new">＋ 新增</button></div>' +
+        (openMy.length ? '<div class="card">' + openMy.map(myRow).join('') + '</div>' : '<div class="empty">沒有待辦。按「＋ 新增」記下要做的事。</div>') +
+        (doneMy.length ? '<details class="more"><summary>最近完成（' + doneMy.length + '）</summary>' + doneMy.map(myRow).join('') + '</details>' : '');
+      view().innerHTML = myHtml + '<div class="sec"><h2>' + (S.me.role === 'dept' ? esc(S.me.dept) + '的待辦' : '門市待辦') + '（' + d.todos.length + '）</h2>' + (late ? '<span class="chip bad right">逾期 ' + late + '</span>' : '') + '</div>' +
         (d.todos.length ? '<div class="card">' + d.todos.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>' : '<div class="empty">目前沒有未結案的待辦</div>') +
         (d.anomTotal ? '<div class="sec"><h2>本月物料異常通報（' + d.anomTotal + '）</h2></div><div class="note">當月新增的只是通報，不算待辦；跨月未處理才列入上面的逾期。</div><div class="card">' + d.anom.map(function (t) { return todoHtml(t, 'list'); }).join('') + '</div>' : '');
     }).catch(failView);
@@ -718,6 +729,24 @@
       busy(b, api('line.code')).then(function (r) { var el = document.getElementById('line-box'); if (el) el.innerHTML = '<div class="note good">綁定碼：<b class="num">' + esc(r.code) + '</b>（10 分鐘內有效）<br>請加公司的 LINE 官方帳號好友，然後傳訊息：<b>綁定 ' + esc(r.code) + '</b></div>'; }).catch(oops);
     },
     'line-unbind': function (b) { busy(b, api('line.unbind')).then(function () { toast('已解除綁定'); closeSheet(); }).catch(oops); },
+    'mt-new': function () {
+      var stores = (S.home && S.home.cards ? S.home.cards.map(function (c) { return c.store; }) : []), ppl = S.data.myPeople || [];
+      openSheet('新增待辦', '<label class="f">要做的事<input type="text" id="mt-text" maxlength="200" placeholder="例：跟加盟主確認 12 月排班"></label>' +
+        '<div class="row"><label class="f grow">期限（選填）<input type="date" id="mt-due"></label><label class="f grow">相關門市（選填）<input type="text" id="mt-store" maxlength="60" list="mt-stores" placeholder="輸入店名"></label></div><datalist id="mt-stores">' + stores.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
+        '<label class="f">備註（選填）<textarea id="mt-note" maxlength="500"></textarea></label>' +
+        (ppl.length ? '<label class="f">交辦給誰（可複選；不選＝自己）</label><div class="pick">' + ppl.map(function (p) { return '<label><input type="checkbox" name="mt-who" value="' + esc(p.account) + '">' + esc(p.name) + '</label>'; }).join('') + '</div>' : '') +
+        '<div class="btns"><button class="btn primary block" data-act="mt-add">新增</button></div>');
+    },
+    'mt-add': function (b) {
+      var q = function (id) { return topBody().querySelector(id).value.trim(); }, f = { text: q('#mt-text'), due: q('#mt-due'), store: q('#mt-store'), note: q('#mt-note'), owners: vals('mt-who') };
+      if (!f.text) return toast('請寫下要做的事');
+      busy(b, api('mytodo.add', f)).then(function (r) { closeSheet(); toast(r.added > 1 ? '已交辦給 ' + r.added + ' 位' : '已新增'); loadTodos(); }).catch(oops);
+    },
+    'mt-done': function (b) { busy(b, api('mytodo.done', { id: b.dataset.id, done: b.dataset.done === '1' })).then(function () { loadTodos(); }).catch(oops); },
+    'mt-del': function (b) {
+      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = '確定刪除？'; return; }
+      busy(b, api('mytodo.delete', { id: b.dataset.id })).then(function () { toast('已刪除'); loadTodos(); }).catch(oops);
+    },
     'p-new': function () {
       var dir = S.me.role === 'director';
       openSheet('新增公告', '<label class="f">類別<select id="pn-cat">' + (S.data.cats || []).map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select></label>' +

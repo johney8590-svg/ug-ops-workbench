@@ -162,6 +162,13 @@ const URL_ = 'http://localhost:' + process.env.PORT + '/';
   await p.context().close();
 
   ok(errors.length === 0, '瀏覽器沒有錯誤（含 CSP）', errors.join(' | '));
+  // 自訂待辦
+  { const m = await open(); await m.goto(URL_); await login(m, 'jill'); await m.click('[data-tab=todos]'); await m.waitForSelector('[data-act=mt-new]');
+    await m.click('[data-act=mt-new]'); await m.fill('#mt-text', '跟加盟主確認 12 月排班'); await m.fill('#mt-due', '2026-11-30'); await m.click('[data-act=mt-add]');
+    await m.waitForSelector('.item.mt'); ok(/跟加盟主確認 12 月排班/.test(await m.textContent('#view')) && /我的待辦（1）/.test(await m.textContent('#view')), '自訂待辦：新增後出現在清單');
+    await shot(m, '13-mytodo');
+    await m.click('.item.mt .tick'); await m.waitForFunction(() => /我的待辦（0）/.test(document.getElementById('view').textContent) && /最近完成（1）/.test(document.getElementById('view').textContent)); ok(true, '自訂待辦：打勾後移到最近完成');
+    ok(await m.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), '自訂待辦：沒有水平捲動'); }
   await browser.close(); server.close();
   console.log(`\n${pass} 通過，${fail} 失敗`);
   process.exit(fail ? 1 : 0);
