@@ -368,6 +368,14 @@ ok(r.data.kpi.jSent === 1 && r.data.kpi.jUnread === 0, '晨報週誌統計', r.d
   ok(!JSON.stringify(e7.books.DATA._sheets.people._rows).includes('Temp-pass-01'), '臨時密碼：資料表不存明碼');
 }
 
+{
+  const e6 = seed(load({ props: { TEMP_PASSWORD: 'Temp-pass-02' } }), { sample: false });
+  const c6 = (action, data, token) => JSON.parse(e6.gas.doPost({ postData: { contents: JSON.stringify({ action, data, token }) } }).content);
+  e6.gas.setAllPasswordsKeep();
+  r = c6('login', { account: 'jill', password: 'Temp-pass-02' });
+  ok(r.ok && !r.data.me.mustChange && c6('home', {}, r.data.token).ok && !('TEMP_PASSWORD' in e6.props), '共用密碼（不強制變更）：登入後可直接使用', r);
+}
+
 // --- 初始密碼流程 ---
 const env2 = seed(load(), { passwords: false, sample: false });
 env2.gas.issuePasswords();

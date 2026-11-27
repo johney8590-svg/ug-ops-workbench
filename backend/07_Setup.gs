@@ -69,9 +69,9 @@ function randomPassword_() {
   for (let i = 0; i < 10; i++) s += chars.charAt((bytes[i] & 0xff) % chars.length);
   return s;
 }
-function setPassword_(p, pw) {
+function setPassword_(p, pw, keep) {
   const salt = Utilities.getUuid();
-  Store.update('people', p._row, { salt: salt, pwHash: hashPw_(salt, pw), mustChange: 'Y' });
+  Store.update('people', p._row, { salt: salt, pwHash: hashPw_(salt, pw), mustChange: keep ? '' : 'Y' });
   // 讓這個人原本的登入狀態全部失效
   Store.rows('sessions').filter(function (s) { return s.account === p.account; }).sort(function (a, b) { return b._row - a._row; })
     .forEach(function (s) { Store.remove('sessions', s._row); });
@@ -119,22 +119,25 @@ function resetPassword(account) {
  * 密碼不寫在程式裡：先在「指令碼屬性」加一筆 TEMP_PASSWORD，再執行這個函式；執行完會自動把那筆屬性刪掉。
  * 所有人會被登出，第一次用臨時密碼登入時會被要求改成自己的密碼。
  */
-function setAllPasswords() {
+function setAllPasswords(keep) {
+  keep = keep === true;
   Store.reset();
   const pw = String(prop_('TEMP_PASSWORD') || '');
   if (pw.length < 8) throw new Error('請先在指令碼屬性加上 TEMP_PASSWORD（至少 8 個字元）');
   let n = 0;
   withLock_(function () {
     Store.rows('people').filter(function (p) { return p.account && yes_(p.active); }).map(function (p) { return p.account; })
-      .forEach(function (a) { setPassword_(person_(a), pw); n++; });
+      .forEach(function (a) { setPassword_(person_(a), pw, keep); n++; });
   });
   PropertiesService.getScriptProperties().deleteProperty('TEMP_PASSWORD');
   const sh = Store.ss().getSheetByName('初始密碼');
   if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);   // 舊的初始密碼已經失效，清掉避免混淆
   audit_('admin', 'password.setall', n + ' 個帳號');
-  console.log('已把 ' + n + ' 個帳號設成臨時密碼；每個人第一次登入都要改密碼。');
+  console.log('已把 ' + n + ' 個帳號設成同一組密碼；' + (keep ? '不強制變更，要改的人自己到「我的帳號」改。' : '每個人第一次登入都要改密碼。'));
   return n;
 }
+/** 同上，但不強制第一次登入變更密碼（營運經理 2026-11-27 決定先這樣上線；風險見 README）。 */
+function setAllPasswordsKeep() { return setAllPasswords(true); }
 function resetPasswordPrompt() {
   const ui = SpreadsheetApp.getUi();
   const r = ui.prompt('重設密碼', '請輸入帳號', ui.ButtonSet.OK_CANCEL);
