@@ -321,8 +321,8 @@ function jDraft_(who, wk, c) {
   const nw = addDays_(wk, 7), nwEnd = addDays_(nw, 6);
   const plan = c.events.filter(function (e) { return e.who === who && e.type === '巡店' && e.start <= nwEnd && e.end >= nw; }).sort(function (a, b) { return a.start.localeCompare(b.start); })
     .map(function (e) { return md_(e.start) + ' ' + e.place; });
-  const stale = activeStores_().filter(function (s) { if (s.supervisor !== who) return false; const lc = lastContact_(s.store, c.visits); return !lc || diffDays_(lc.date, c.today) >= 14; }).map(function (s) { return s.store; });
-  if (stale.length) plan.push(stale.join('、') + ' 已超過兩週沒有關心，安排巡店或遠端抽查');
+  const stale = activeStores_().filter(function (s) { if (s.supervisor !== who) return false; const lc = lastContact_(s.store, c.visits); return !lc || diffDays_(lc.date, c.today) >= 7; }).map(function (s) { return s.store; });
+  if (stale.length) plan.push(stale.join('、') + ' 已超過一週沒有關心，安排巡店或遠端抽查');
   return { n: vs.length, found: found.join('\n'), issue: issue.join('\n'), plan: plan.join('\n'), needs: '' };
 }
 function journalRow_(who, wk) { return Store.rows('journals').filter(function (j) { return j.who === who && j.week === wk; })[0]; }
